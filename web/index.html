@@ -30,14 +30,14 @@
         <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
         <li>Apri un referendum e <b>vota</b>. (Se sei il governo, prima crealo dalla console.)</li>
       </ol>
-      <p class="note">⚠️ Serve <b>MetaMask</b> e i contratti già deployati sulla rete selezionata. L'indirizzo <code>0x5FbD…</code> preinserito vale <b>solo per Anvil locale</b>: su Sepolia incolla l'indirizzo del <b>tuo</b> deploy di <code>SystemBootstrap</code>.</p>
+      <p class="note">⚠️ Serve <b>MetaMask</b> e i contratti deployati su <b>Sepolia</b>: deploya <code>SystemBootstrap</code> in Remix (rete Sepolia, ETH da un faucet), poi incolla qui sotto il suo indirizzo e premi <b>Carica</b>.</p>
     </section>
 
     <details class="card" id="cfgCard" open>
       <summary>⚙️ Configurazione contratti</summary>
       <p class="muted">Deploya <code>SystemBootstrap</code> (Remix oppure <code>forge create</code>), incolla il suo indirizzo e premi <b>Carica</b>: ricava Router e Factory. In alternativa inseriscili a mano (es. output di <code>DeploySystem.s.sol</code>).</p>
       <label class="field"><span>SystemBootstrap (consigliato)</span>
-        <div class="row"><input id="bootAddr" spellcheck="false" value="0x5FbDB2315678afecb367f032d93F642f64180aa3">
+        <div class="row"><input id="bootAddr" spellcheck="false" placeholder="0x… (indirizzo del tuo SystemBootstrap su Sepolia)">
         <button id="loadBoot" class="btn">Carica</button></div>
       </label>
       <label class="field"><span>SPIDWalletRouter</span><input id="routerAddr" spellcheck="false" placeholder="0x…"></label>
