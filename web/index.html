@@ -25,13 +25,11 @@
     <section class="card howto">
       <h2>Come si usa</h2>
       <ol class="steps-list">
-        <li><b>Connetti wallet</b> (MetaMask) — bottone in alto a destra.</li>
-        <li>In MetaMask scegli la <b>rete</b> con un po' di <b>ETH di test</b>: <b>Sepolia</b> (faucet) o Anvil locale (se hai un nodo).</li>
-        <li><b>Setup (una volta sola)</b>: apri <b>🔧 Admin</b> → <b>Deploya sistema</b> → conferma in MetaMask → crea un referendum.</li>
-        <li><b>Crea identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
-        <li>Apri un referendum e <b>vota</b>.</li>
+        <li><b>Connetti wallet</b> (MetaMask) sulla rete del referendum (es. <b>Sepolia</b>).</li>
+        <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
+        <li>Apri un referendum, <b>vota</b> (commit con nonce) e poi <b>rivela</b>.</li>
       </ol>
-      <p class="note">Deploy, configurazione e console del Governo stanno nell'area <b>🔧 Admin</b> (non visibile ai votanti). Dopo il primo deploy gli indirizzi restano salvati nel tuo browser: alle visite successive basta connettersi.</p>
+      <p class="note">La creazione dei referendum e la gestione delle fasi sono a cura del <b>gestore</b> (off-site). I tuoi dati personali non finiscono on-chain: solo l'hash del codice fiscale (pseudonimo).</p>
     </section>
 
     <!-- ============ AREA ADMIN (setup, non pubblica) ============ -->
@@ -89,6 +87,7 @@
   </main>
 
   <footer class="foot">Prototipo accademico INF0422 · SPID simulato · contratti Solidity (Foundry)</footer>
+  <script src="config.js"></script>
   <script src="contracts.js"></script>
   <script src="app.js"></script>
 </body>

@@ -45,6 +45,10 @@ const LS = "votechain.cfg";
 const loadCfg = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } };
 const persistCfg = (c) => localStorage.setItem(LS, JSON.stringify(c));
 
+// Admin (deploy/config/governo) solo in locale; su GitHub Pages = solo voto.
+const IS_PUBLIC = !/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname);
+const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "" };
+
 const S = { provider: null, signer: null, account: null, router: null, factory: null };
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
@@ -80,7 +84,8 @@ $("connect").onclick = async () => {
   $("connect").textContent = "Connesso";
   window.ethereum.on?.("accountsChanged", () => location.reload());
   window.ethereum.on?.("chainChanged", () => location.reload());
-  if (!initContracts()) toast("Imposta gli indirizzi dei contratti (⚙️ Configurazione).", "err");
+  await ensureAddresses();
+  if (!initContracts()) toast(IS_PUBLIC ? "Sistema non ancora configurato." : "Imposta gli indirizzi (Admin).", "err");
   await refresh();
 };
 
@@ -91,6 +96,18 @@ function initContracts() {
   S.factory = new ethers.Contract(f, FACTORY_ABI, S.signer || S.provider);
   persistCfg({ boot: $("bootAddr").value.trim(), router: r, factory: f });
   return true;
+}
+
+// If only a SystemBootstrap address is known, derive Router/Factory from it.
+async function ensureAddresses() {
+  const ok = (id) => ethers.isAddress($(id).value.trim());
+  if (ok("routerAddr") && ok("factoryAddr")) return;
+  const b = $("bootAddr").value.trim();
+  if (!ethers.isAddress(b) || !S.signer) return;
+  try {
+    const [r, f] = await new ethers.Contract(b, BOOTSTRAP_ABI, S.signer).addresses();
+    $("routerAddr").value = r; $("factoryAddr").value = f;
+  } catch { /* indirizzo bootstrap non valido sulla rete corrente */ }
 }
 
 $("saveCfg").onclick = async () => {
@@ -172,6 +189,7 @@ async function refreshSpidStatus() {
 
 // ---------------------------------------------------------------- governo
 async function refreshGovPanel() {
+  if (IS_PUBLIC) return;            // console governo non disponibile sul sito pubblico
   if (!S.router || !S.account) return;
   const jurs = [];
   for (const j of ["Italia", "San Marino"]) {
@@ -240,7 +258,7 @@ async function card(addr) {
     actions += `<p class="muted">Non puoi votare qui (fuori giurisdizione o login SPID mancante).</p>`;
 
   let govCtl = "";
-  if (isGov) {
+  if (isGov && !IS_PUBLIC) {
     govCtl = `<div class="gov-ctl">
       <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="1" ${phase === 1 || finalized ? "disabled" : ""}>Apri voto</button>
       <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="2" ${phase !== 1 ? "disabled" : ""}>Spoglio</button>
@@ -341,7 +359,11 @@ function wireCards() {
 
 (function initUI() {
   const c = loadCfg();
-  if (c.boot) $("bootAddr").value = c.boot;
-  if (c.router) $("routerAddr").value = c.router;
-  if (c.factory) $("factoryAddr").value = c.factory;
+  $("bootAddr").value = c.boot || CFG.bootstrap || "";
+  $("routerAddr").value = c.router || CFG.router || "";
+  $("factoryAddr").value = c.factory || CFG.factory || "";
+  if (IS_PUBLIC) {            // nascondi admin sul sito pubblico
+    $("adminToggle").classList.add("hidden");
+    $("adminArea").classList.add("hidden");
+  }
 })();
