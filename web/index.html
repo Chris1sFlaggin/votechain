@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoteChain · dApp referendum</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="vendor/ethers.umd.min.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="brand"><span aria-hidden="true">⛓</span> Vote<strong>Chain</strong> <small>dApp · 100% on-chain</small></div>
+    <div class="nav__right">
+      <span id="who" class="who hidden"></span>
+      <button id="connect" class="btn btn--primary">Connetti wallet</button>
+    </div>
+  </header>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <main class="wrap">
+    <details class="card" id="cfgCard" open>
+      <summary>⚙️ Configurazione contratti</summary>
+      <p class="muted">Deploya <code>SystemBootstrap</code> (Remix oppure <code>forge create</code>), incolla il suo indirizzo e premi <b>Carica</b>: ricava Router e Factory. In alternativa inseriscili a mano (es. output di <code>DeploySystem.s.sol</code>).</p>
+      <label class="field"><span>SystemBootstrap (consigliato)</span>
+        <div class="row"><input id="bootAddr" spellcheck="false" value="0x5FbDB2315678afecb367f032d93F642f64180aa3">
+        <button id="loadBoot" class="btn">Carica</button></div>
+      </label>
+      <label class="field"><span>SPIDWalletRouter</span><input id="routerAddr" spellcheck="false" placeholder="0x…"></label>
+      <label class="field"><span>GovFactory</span><input id="factoryAddr" spellcheck="false" placeholder="0x…"></label>
+      <div class="row">
+        <button id="saveCfg" class="btn btn--primary">Salva e ricarica</button>
+        <button id="addNet" class="btn">+ Rete Anvil in MetaMask</button>
+      </div>
+      <p class="note">Rete: anvil <code>http://127.0.0.1:8545</code> (chainId 31337) o una testnet (es. <b>Sepolia</b> per GitHub Pages). Gli indirizzi restano salvati nel browser.</p>
+    </details>
+
+    <section class="card" id="spidCard">
+      <h2>🔐 Accesso SPID (simulato)</h2>
+      <p class="muted">Crea un'identità SPID <b>fittizia</b> (PoC). Nome e cognome sono solo a scopo dimostrativo: <b>non vengono inviati on-chain, non vengono salvati e non vengono mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
+      <div class="grid2">
+        <label class="field"><span>Nome (non salvato)</span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
+        <label class="field"><span>Cognome (non salvato)</span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
+        <label class="field"><span>Codice fiscale (qualsiasi → pseudonimo)</span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
+        <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
+      </div>
+      <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
+      <div class="row">
+        <button id="spidLogin" class="btn btn--spid">Crea identità SPID simulata</button>
+        <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
+      </div>
+      <p id="spidStatus" class="muted"></p>
+    </section>
+
+    <section class="card hidden" id="govCard">
+      <h2>🏛 Console Governo</h2>
+      <p class="muted">Il tuo wallet risulta governo per: <b id="govJurs"></b>. Emana un nuovo referendum (deploy on-chain via <code>GovFactory</code>).</p>
+      <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Referendum 2026"></label>
+      <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
+      <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
+      <button id="createRef" class="btn btn--gov">📜 Emana referendum</button>
+    </section>
+
+    <h2 class="section-title">Referendum on-chain</h2>
+    <div id="referenda" class="ref-grid"></div>
+  </main>
+
+  <footer class="foot">Prototipo accademico INF0422 · SPID simulato · contratti Solidity (Foundry)</footer>
+  <script src="app.js"></script>
+</body>
+</html>
