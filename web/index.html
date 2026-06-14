@@ -14,6 +14,7 @@
     <div class="brand"><span aria-hidden="true">⛓</span> Vote<strong>Chain</strong> <small>dApp · 100% on-chain</small></div>
     <div class="nav__right">
       <span id="who" class="who hidden"></span>
+      <button id="adminToggle" class="btn">🔧 Admin</button>
       <button id="connect" class="btn btn--primary">Connetti wallet</button>
     </div>
   </header>
@@ -25,34 +26,47 @@
       <h2>Come si usa</h2>
       <ol class="steps-list">
         <li><b>Connetti wallet</b> (MetaMask) — bottone in alto a destra.</li>
-        <li>In MetaMask scegli la <b>rete</b>: <b>Sepolia</b> (consigliata per il sito pubblico) oppure Anvil locale.</li>
-        <li><b>Deploya i contratti</b>: premi <b>🚀 Deploya sistema</b> in Configurazione e conferma in MetaMask. (oppure incolla un indirizzo già deployato → Carica)</li>
-        <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
-        <li>Apri un referendum e <b>vota</b>. (Se sei il governo, prima crealo dalla console.)</li>
+        <li>In MetaMask scegli la <b>rete</b> con un po' di <b>ETH di test</b>: <b>Sepolia</b> (faucet) o Anvil locale (se hai un nodo).</li>
+        <li><b>Setup (una volta sola)</b>: apri <b>🔧 Admin</b> → <b>Deploya sistema</b> → conferma in MetaMask → crea un referendum.</li>
+        <li><b>Crea identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
+        <li>Apri un referendum e <b>vota</b>.</li>
       </ol>
-      <p class="note">⚠️ Serve <b>MetaMask</b> con un po' di <b>ETH di test</b> sulla rete scelta (Sepolia: ETH da un faucet; Anvil: account già finanziati). Il deploy si fa col bottone <b>🚀 Deploya sistema</b> qui sotto.</p>
+      <p class="note">Deploy, configurazione e console del Governo stanno nell'area <b>🔧 Admin</b> (non visibile ai votanti). Dopo il primo deploy gli indirizzi restano salvati nel tuo browser: alle visite successive basta connettersi.</p>
     </section>
 
-    <details class="card" id="cfgCard" open>
-      <summary>⚙️ Configurazione contratti</summary>
-      <div class="deploy-box">
-        <span>🚀 <b>Modo rapido</b>: deploya l'intero sistema con un clic — il tuo wallet paga il gas sulla rete selezionata (Sepolia o Anvil). Niente Remix.</span>
-        <button id="deployBtn" class="btn btn--primary">Deploya sistema</button>
-      </div>
-      <p class="muted">Oppure, se hai già un <code>SystemBootstrap</code> deployato, incolla il suo indirizzo qui sotto e premi <b>Carica</b>.</p>
-      <label class="field"><span>SystemBootstrap (consigliato)</span>
-        <div class="row"><input id="bootAddr" spellcheck="false" placeholder="0x… (indirizzo del tuo SystemBootstrap su Sepolia)">
-        <button id="loadBoot" class="btn">Carica</button></div>
-      </label>
-      <label class="field"><span>SPIDWalletRouter</span><input id="routerAddr" spellcheck="false" placeholder="0x…"></label>
-      <label class="field"><span>GovFactory</span><input id="factoryAddr" spellcheck="false" placeholder="0x…"></label>
-      <div class="row">
-        <button id="saveCfg" class="btn btn--primary">Salva e ricarica</button>
-        <button id="addNet" class="btn">+ Rete Anvil in MetaMask</button>
-      </div>
-      <p class="note">Rete: anvil <code>http://127.0.0.1:8545</code> (chainId 31337) o una testnet (es. <b>Sepolia</b> per GitHub Pages). Gli indirizzi restano salvati nel browser.</p>
-    </details>
+    <!-- ============ AREA ADMIN (setup, non pubblica) ============ -->
+    <div id="adminArea" class="hidden">
+      <details class="card" id="cfgCard" open>
+        <summary>⚙️ Configurazione contratti</summary>
+        <div class="deploy-box">
+          <span>🚀 <b>Deploya sistema</b> con un clic — il tuo wallet paga il gas sulla rete selezionata. Niente Remix.</span>
+          <button id="deployBtn" class="btn btn--primary">Deploya sistema</button>
+        </div>
+        <p class="muted">Oppure, se hai già un <code>SystemBootstrap</code> deployato, incolla il suo indirizzo e premi <b>Carica</b>.</p>
+        <label class="field"><span>SystemBootstrap</span>
+          <div class="row"><input id="bootAddr" spellcheck="false" placeholder="0x… (indirizzo SystemBootstrap)">
+          <button id="loadBoot" class="btn">Carica</button></div>
+        </label>
+        <label class="field"><span>SPIDWalletRouter</span><input id="routerAddr" spellcheck="false" placeholder="0x…"></label>
+        <label class="field"><span>GovFactory</span><input id="factoryAddr" spellcheck="false" placeholder="0x…"></label>
+        <div class="row">
+          <button id="saveCfg" class="btn btn--primary">Salva e ricarica</button>
+          <button id="addNet" class="btn">+ Rete Anvil in MetaMask</button>
+        </div>
+        <p class="note">Rete: anvil <code>http://127.0.0.1:8545</code> (chainId 31337) o una testnet (es. <b>Sepolia</b>). Gli indirizzi restano salvati nel browser.</p>
+      </details>
 
+      <section class="card" id="govCard">
+        <h2>🏛 Console Governo</h2>
+        <p class="muted">Il tuo wallet risulta governo per: <b id="govJurs"></b>. Emana un nuovo referendum (deploy on-chain via <code>GovFactory</code>).</p>
+        <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Referendum 2026"></label>
+        <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
+        <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
+        <button id="createRef" class="btn btn--gov">📜 Emana referendum</button>
+      </section>
+    </div>
+
+    <!-- ============ AREA PUBBLICA (votanti) ============ -->
     <section class="card" id="spidCard">
       <h2>🔐 Accesso SPID (simulato)</h2>
       <p class="muted">Crea un'identità SPID <b>fittizia</b> (PoC). Nome e cognome sono solo a scopo dimostrativo: <b>non vengono inviati on-chain, non vengono salvati e non vengono mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
@@ -68,15 +82,6 @@
         <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
       </div>
       <p id="spidStatus" class="muted"></p>
-    </section>
-
-    <section class="card hidden" id="govCard">
-      <h2>🏛 Console Governo</h2>
-      <p class="muted">Il tuo wallet risulta governo per: <b id="govJurs"></b>. Emana un nuovo referendum (deploy on-chain via <code>GovFactory</code>).</p>
-      <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Referendum 2026"></label>
-      <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
-      <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
-      <button id="createRef" class="btn btn--gov">📜 Emana referendum</button>
     </section>
 
     <h2 class="section-title">Referendum on-chain</h2>

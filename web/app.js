@@ -114,7 +114,9 @@ $("deployBtn").onclick = async () => {
   if (!S.signer) return toast("Connetti il wallet prima.", "err");
   if (typeof SYSTEM_BOOTSTRAP === "undefined") return toast("Bytecode non caricato (contracts.js).", "err");
   try {
-    toast("Deploy in corso… conferma in MetaMask e attendi", "wait");
+    const net = await S.provider.getNetwork();
+    const nn = net.name && net.name !== "unknown" ? net.name : "chain " + net.chainId;
+    toast(`Deploy su ${nn}… conferma in MetaMask e attendi`, "wait");
     const factory = new ethers.ContractFactory(SYSTEM_BOOTSTRAP.abi, SYSTEM_BOOTSTRAP.bytecode, S.signer);
     const c = await factory.deploy();
     await c.waitForDeployment();
@@ -125,6 +127,8 @@ $("deployBtn").onclick = async () => {
     if (initContracts()) { await refresh(); toast("Sistema deployato! Ora crea l'identità SPID e vota.", "ok"); }
   } catch (e) { toast("Deploy fallito: " + reason(e), "err"); }
 };
+
+$("adminToggle").onclick = () => $("adminArea").classList.toggle("hidden");
 
 $("addNet").onclick = async () => {
   if (!window.ethereum) return toast("MetaMask non rilevato.", "err");
