@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VoteChain · referendum su blockchain</title>
+  <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -18,75 +18,102 @@
     </div>
   </header>
 
+  <div class="tabs">
+    <button id="tabPolitical" class="tab is-active">🏛 Istituzionale</button>
+    <button id="tabSocial" class="tab">💬 Sondaggi social</button>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <main class="wrap">
 
-    <!-- ===================== LANDING (non connesso) ===================== -->
-    <section id="landing" class="hero">
-      <div class="hero__glow" aria-hidden="true"></div>
-      <p class="hero__eyebrow">Referendum digitali · testnet Sepolia</p>
-      <h1 class="hero__title">Vota sulla blockchain,<br>il tuo voto resta segreto</h1>
-      <p class="hero__sub">Identità SPID simulata, commit–reveal con nonce, conteggio verificabile on-chain. Nessun dato personale sulla catena.</p>
-      <button id="connectHero" class="btn btn--primary btn--xl">Connetti wallet per iniziare</button>
-      <div class="chips">
-        <div class="chip"><span>1</span> Connetti MetaMask (Sepolia)</div>
-        <div class="chip"><span>2</span> Crea identità SPID</div>
-        <div class="chip"><span>3</span> Vota e rivela</div>
-      </div>
-    </section>
-
-    <!-- ===================== AREA GOVERNO ===================== -->
-    <section id="govArea" class="hidden">
-      <div class="role-banner role-banner--gov">
-        <div><b>🏛 Pannello Governo</b><span>Sei l'autorità per: <b id="govJurs"></b>. Emani i referendum; i cittadini votano dal proprio account.</span></div>
-      </div>
-      <section class="card">
-        <h2>Emana un referendum</h2>
-        <div class="grid2">
-          <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Es. Referendum Costituzionale 2026"></label>
-          <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
-        </div>
-        <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
-        <button id="createRef" class="btn btn--gov btn--xl">📜 Emana referendum</button>
-      </section>
-    </section>
-
-    <!-- ===================== AREA CITTADINO ===================== -->
-    <section id="citizenArea" class="hidden">
-      <div class="role-banner role-banner--cit">
-        <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Crea un'identità SPID simulata per poter votare.</span></div>
-      </div>
-      <section class="card" id="spidCard">
-        <h2>🔐 Accesso SPID <small>(simulato)</small></h2>
-        <p class="muted">PoC: nome e cognome sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
-        <div class="grid2">
-          <label class="field"><span>Nome <em>(non salvato)</em></span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
-          <label class="field"><span>Cognome <em>(non salvato)</em></span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
-          <label class="field"><span>Codice fiscale <em>(qualsiasi → pseudonimo)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
-          <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
-        </div>
-        <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
-        <div class="row">
-          <button id="spidLogin" class="btn btn--spid btn--xl">Crea identità SPID</button>
-          <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
+    <!-- ============================================================ ISTITUZIONALE -->
+    <div id="politicalView">
+      <section id="landing" class="hero">
+        <div class="hero__glow" aria-hidden="true"></div>
+        <p class="hero__eyebrow">Referendum digitali · testnet Sepolia</p>
+        <h1 class="hero__title">Vota sulla blockchain,<br>il tuo voto resta segreto</h1>
+        <p class="hero__sub">Identità SPID simulata, commit–reveal con nonce, conteggio verificabile on-chain. Nessun dato personale sulla catena.</p>
+        <button id="connectHero" class="btn btn--primary btn--xl">Connetti wallet per iniziare</button>
+        <div class="chips">
+          <div class="chip"><span>1</span> Connetti MetaMask (Sepolia)</div>
+          <div class="chip"><span>2</span> Crea identità SPID</div>
+          <div class="chip"><span>3</span> Vota e rivela</div>
         </div>
       </section>
-    </section>
 
-    <!-- ===================== REFERENDUM (entrambi i ruoli) ===================== -->
-    <section id="voteSection" class="hidden">
-      <h2 class="section-title">Referendum on-chain</h2>
-      <div id="referenda" class="ref-grid"></div>
-    </section>
+      <section id="govArea" class="hidden">
+        <div class="role-banner role-banner--gov">
+          <div><b>🏛 Pannello Governo</b><span>Sei l'autorità per: <b id="govJurs"></b>. Emani i referendum; i cittadini votano dal proprio account (il governo non vota).</span></div>
+        </div>
+        <section class="card">
+          <h2>Emana un referendum</h2>
+          <div class="grid2">
+            <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Es. Referendum Costituzionale 2026"></label>
+            <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
+          </div>
+          <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
+          <button id="createRef" class="btn btn--gov btn--xl">📜 Emana referendum</button>
+        </section>
+      </section>
+
+      <section id="citizenArea" class="hidden">
+        <div class="role-banner role-banner--cit">
+          <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Crea un'identità SPID simulata per poter votare.</span></div>
+        </div>
+        <section class="card" id="spidCard">
+          <h2>🔐 Accesso SPID <small>(simulato)</small></h2>
+          <p class="muted">PoC: nome e cognome sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
+          <div class="grid2">
+            <label class="field"><span>Nome <em>(non salvato)</em></span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
+            <label class="field"><span>Cognome <em>(non salvato)</em></span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
+            <label class="field"><span>Codice fiscale <em>(qualsiasi → pseudonimo)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
+            <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
+          </div>
+          <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
+          <div class="row">
+            <button id="spidLogin" class="btn btn--spid btn--xl">Crea identità SPID</button>
+            <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="voteSection" class="hidden">
+        <h2 class="section-title">Referendum on-chain</h2>
+        <div id="referenda" class="ref-grid"></div>
+      </section>
+    </div>
+
+    <!-- ============================================================ SOCIAL -->
+    <div id="socialView" class="social hidden">
+      <section class="social-hero">
+        <h1>💬 Sondaggi della community</h1>
+        <p>Chiunque crea un sondaggio mettendo una piccola <b>cauzione</b> e chiunque vota (una volta). Se il sondaggio raggiunge la <b>soglia di voti</b>, il creatore <b>riprende la cauzione</b> 💸. Niente SPID: aperto a tutti.</p>
+        <button id="connectSocial" class="btn btn--social btn--xl">Connetti wallet</button>
+      </section>
+
+      <section class="card social-create" id="createCard">
+        <h2>✨ Crea un sondaggio</h2>
+        <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza 🍕 o Pasta 🍝?" autocomplete="off"></label>
+        <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
+        <div class="grid2">
+          <label class="field"><span>Soglia di voti per vincere</span><input id="pollThreshold" type="number" min="1" value="5"></label>
+          <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
+        </div>
+        <button id="createPoll" class="btn btn--social btn--xl">🚀 Pubblica sondaggio</button>
+        <p class="note">La cauzione torna a te se il sondaggio raggiunge la soglia. Altrimenti resta bloccata (anti-spam).</p>
+      </section>
+
+      <div id="pollFeed" class="poll-feed"></div>
+    </div>
 
   </main>
 
   <footer class="foot">
-    <span>Prototipo accademico INF0422 · SPID simulato · contratti Solidity su <b>Sepolia</b></span>
+    <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
-  <script src="config.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="config.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

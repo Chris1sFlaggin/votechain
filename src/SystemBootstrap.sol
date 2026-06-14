@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {SPIDWalletRouter} from "./auth/SPIDWalletRouter.sol";
 import {GovFactory} from "./core/GovFactory.sol";
+import {PollHub} from "./social/PollHub.sol";
 
 /// @title SystemBootstrap — one-click wiring of the whole system (Remix friendly).
 /// @notice Deploy THIS single contract and the system is ready:
@@ -15,12 +16,14 @@ import {GovFactory} from "./core/GovFactory.sol";
 contract SystemBootstrap {
     SPIDWalletRouter public router;
     GovFactory public factory;
+    PollHub public pollHub;
 
-    event SystemReady(address router, address factory, address government);
+    event SystemReady(address router, address factory, address pollHub, address government);
 
     constructor() {
         router = new SPIDWalletRouter(); // this contract becomes ADMIN + ORACLE
         factory = new GovFactory(router);
+        pollHub = new PollHub(); // parte social: sondaggi aperti a tutti
 
         address human = tx.origin; // the EOA deploying via Remix/MetaMask
         router.grantRole(router.ADMIN(), human);
@@ -28,11 +31,11 @@ contract SystemBootstrap {
         router.registerGovernment(human, "Italia");
         router.registerGovernment(human, "San Marino");
 
-        emit SystemReady(address(router), address(factory), human);
+        emit SystemReady(address(router), address(factory), address(pollHub), human);
     }
 
-    /// @notice Convenience read for the frontend: both core addresses in one call.
-    function addresses() external view returns (address routerAddr, address factoryAddr) {
-        return (address(router), address(factory));
+    /// @notice Convenience read for the frontend: core addresses in one call.
+    function addresses() external view returns (address routerAddr, address factoryAddr, address pollHubAddr) {
+        return (address(router), address(factory), address(pollHub));
     }
 }

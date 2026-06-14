@@ -22,4 +22,12 @@ library Errors {
     error CloseOnlyFromTally();
     error AlreadyFinalized();
     error EmptyOptions();
+
+    // social polls
+    error BadPoll();
+    error AlreadyVoted();
+    error UnknownOption();
+    error NotCreator();
+    error PollNotWon();
+    error AlreadyClaimed();
 }

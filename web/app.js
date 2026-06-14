@@ -36,10 +36,19 @@ const REF_ABI = [
   "function setPhase(uint8)",
   "function close()",
 ];
-const BOOTSTRAP_ABI = ["function addresses() view returns (address, address)"];
+const BOOTSTRAP_ABI = ["function addresses() view returns (address, address, address)"];
+const POLLHUB_ABI = [
+  "function createPoll(string, bytes32[], uint64) payable returns (uint256)",
+  "function vote(uint256, bytes32)",
+  "function claim(uint256)",
+  "function pollsCount() view returns (uint256)",
+  "function getPoll(uint256) view returns (address creator, string question, bytes32[] options, uint64 threshold, uint128 stake, uint64 totalVotes, bool won, bool claimed)",
+  "function optionVotes(uint256, bytes32) view returns (uint256)",
+  "function hasVoted(uint256, address) view returns (bool)",
+];
 
-const S = { provider: null, signer: null, account: null, router: null, factory: null };
-const ADDR = { router: "", factory: "" };
+const S = { provider: null, signer: null, account: null, router: null, factory: null, pollHub: null };
+const ADDR = { router: "", factory: "", pollHub: "" };
 let GOV_JURS = [];
 let IS_GOV = false;
 
@@ -90,19 +99,24 @@ async function connect() {
   const okAddr = await resolveAddresses();
   if (!okAddr || !initContracts()) { toast("Sistema non configurato per questa rete (config.js).", "err"); return; }
   await refresh();
+  if (!$("socialView").classList.contains("hidden")) await renderPolls();
 }
 $("connect").onclick = connect;
 $("connectHero").onclick = connect;
+$("connectSocial").onclick = connect;
 
 async function resolveAddresses() {
-  if (ethers.isAddress(CFG.router) && ethers.isAddress(CFG.factory)) {
-    ADDR.router = CFG.router; ADDR.factory = CFG.factory; return true;
-  }
+  // dal bootstrap (ritorna router, factory, pollHub)
   if (ethers.isAddress(CFG.bootstrap) && S.signer) {
     try {
-      const [r, f] = await new ethers.Contract(CFG.bootstrap, BOOTSTRAP_ABI, S.signer).addresses();
-      ADDR.router = r; ADDR.factory = f; return true;
-    } catch { return false; }
+      const [r, f, ph] = await new ethers.Contract(CFG.bootstrap, BOOTSTRAP_ABI, S.signer).addresses();
+      ADDR.router = r; ADDR.factory = f; ADDR.pollHub = ph; return true;
+    } catch { /* bootstrap vecchio o non valido: provo gli indirizzi diretti */ }
+  }
+  if (ethers.isAddress(CFG.router) && ethers.isAddress(CFG.factory)) {
+    ADDR.router = CFG.router; ADDR.factory = CFG.factory;
+    ADDR.pollHub = ethers.isAddress(CFG.pollHub) ? CFG.pollHub : "";
+    return true;
   }
   return false;
 }
@@ -110,6 +124,7 @@ function initContracts() {
   if (!ethers.isAddress(ADDR.router) || !ethers.isAddress(ADDR.factory)) return false;
   S.router = new ethers.Contract(ADDR.router, ROUTER_ABI, S.signer || S.provider);
   S.factory = new ethers.Contract(ADDR.factory, FACTORY_ABI, S.signer || S.provider);
+  S.pollHub = ethers.isAddress(ADDR.pollHub) ? new ethers.Contract(ADDR.pollHub, POLLHUB_ABI, S.signer || S.provider) : null;
   return true;
 }
 
@@ -328,4 +343,90 @@ function wireCards() {
 function updateJurList() {
   const dl = $("jurList");
   if (dl) dl.innerHTML = [...seenJur].map((j) => `<option>${j}</option>`).join("");
+}
+
+// =================================================================== SOCIAL
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function showView(which) {
+  const social = which === "social";
+  $("socialView").classList.toggle("hidden", !social);
+  $("politicalView").classList.toggle("hidden", social);
+  $("tabSocial").classList.toggle("is-active", social);
+  $("tabPolitical").classList.toggle("is-active", !social);
+  if (social) renderPolls();
+}
+$("tabPolitical").onclick = () => showView("political");
+$("tabSocial").onclick = () => showView("social");
+
+$("createPoll").onclick = async () => {
+  if (!S.pollHub) return toast("Connetti il wallet su Sepolia (se manca, il gestore deve ridepoloyare con PollHub).", "err");
+  const q = $("pollQ").value.trim();
+  const opts = $("pollOpts").value.split("\n").map((s) => s.trim()).filter(Boolean);
+  const th = parseInt($("pollThreshold").value, 10);
+  if (!q || opts.length < 2) return toast("Domanda + almeno 2 opzioni.", "err");
+  if (opts.some((o) => o.length > 31)) return toast("Opzioni: max 31 caratteri.", "err");
+  if (!th || th < 1) return toast("Soglia di voti non valida.", "err");
+  let value;
+  try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
+  if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
+  const b32 = opts.map((o) => ethers.encodeBytes32String(o));
+  const ok = await tx(S.pollHub.createPoll(q, b32, th, { value }), "Sondaggio pubblicato! 🎉");
+  if (ok) { $("pollQ").value = ""; $("pollOpts").value = ""; await renderPolls(); }
+};
+
+async function renderPolls() {
+  const feed = $("pollFeed");
+  if (!S.pollHub) { feed.innerHTML = `<div class="empty">Sondaggi non disponibili su questa rete: il gestore deve ridepoloyare il sistema (con PollHub).</div>`; return; }
+  let n;
+  try { n = Number(await S.pollHub.pollsCount()); } catch (e) { feed.innerHTML = `<div class="empty">Errore: ${reason(e)}</div>`; return; }
+  if (!n) { feed.innerHTML = `<div class="empty">Ancora nessun sondaggio. Creane uno qui sopra! ✨</div>`; return; }
+  const ids = [...Array(n).keys()].reverse(); // più recenti in cima
+  feed.innerHTML = (await Promise.all(ids.map(pollCard))).join("");
+  wirePolls();
+}
+
+async function pollCard(id) {
+  const p = await S.pollHub.getPoll(id);
+  const creator = p.creator, question = p.question, optsRaw = p.options;
+  const threshold = Number(p.threshold), stake = p.stake, total = Number(p.totalVotes);
+  const won = p.won, claimed = p.claimed;
+  const options = optsRaw.map((b) => ethers.decodeBytes32String(b));
+  const voted = await S.pollHub.hasVoted(id, S.account).catch(() => false);
+  const isCreator = S.account && creator.toLowerCase() === S.account.toLowerCase();
+  const counts = (await Promise.all(optsRaw.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
+
+  const opts = options.map((o, i) => {
+    const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
+    const dis = (voted || isCreator) ? "disabled" : "";
+    return `<button class="poll-opt" data-pid="${id}" data-opt="${escapeHtml(o)}" ${dis}>
+      <span class="poll-opt__l"><b>${escapeHtml(o)}</b><i>${v}${total ? ` · ${pct}%` : ""}</i></span>
+      <span class="poll-opt__bar"><span style="width:${pct}%"></span></span></button>`;
+  }).join("");
+
+  const prog = Math.min(100, Math.round((100 * total) / threshold));
+  const badge = won ? `<span class="won">🏆 VINTO</span>` : `<span class="prog-pill">${total}/${threshold}</span>`;
+  let claim = "";
+  if (isCreator && won && !claimed) claim = `<button class="btn btn--social poll-claim" data-claim="${id}">💸 Reclama cauzione (${ethers.formatEther(stake)} ETH)</button>`;
+  else if (isCreator && claimed) claim = `<span class="muted">✔ cauzione riscattata</span>`;
+  const tags = `${isCreator ? '<span class="pill">tuo</span>' : ""}${voted ? '<span class="pill pill--ok">hai votato</span>' : ""}`;
+
+  return `<article class="poll">
+    <div class="poll__head">${avatar(creator)}<span class="addr">${creator.slice(0, 6)}…${creator.slice(-4)}</span>${tags}<span class="poll__stake">cauzione ${ethers.formatEther(stake)}Ξ</span>${badge}</div>
+    <h3 class="poll__q">${escapeHtml(question)}</h3>
+    <div class="poll__opts">${opts}</div>
+    <div class="poll__prog"><div class="poll__progbar"><div style="width:${prog}%"></div></div><span>${total} / ${threshold} voti per vincere</span></div>
+    ${claim}
+  </article>`;
+}
+
+function wirePolls() {
+  document.querySelectorAll(".poll-opt:not([disabled])").forEach((b) => b.onclick = async () => {
+    const ok = await tx(S.pollHub.vote(Number(b.dataset.pid), ethers.encodeBytes32String(b.dataset.opt)), "Voto registrato! 🗳");
+    if (ok) await renderPolls();
+  });
+  document.querySelectorAll("[data-claim]").forEach((b) => b.onclick = async () => {
+    const ok = await tx(S.pollHub.claim(Number(b.dataset.claim)), "Cauzione riscattata 💸");
+    if (ok) await renderPolls();
+  });
 }
