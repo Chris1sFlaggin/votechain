@@ -26,16 +26,20 @@
       <ol class="steps-list">
         <li><b>Connetti wallet</b> (MetaMask) — bottone in alto a destra.</li>
         <li>In MetaMask scegli la <b>rete</b>: <b>Sepolia</b> (consigliata per il sito pubblico) oppure Anvil locale.</li>
-        <li><b>Deploya i contratti</b>: in Remix deploya <code>SystemBootstrap</code> sulla stessa rete, copia il suo indirizzo, incollalo qui sotto in <b>Configurazione</b> → <b>Carica</b>.</li>
+        <li><b>Deploya i contratti</b>: premi <b>🚀 Deploya sistema</b> in Configurazione e conferma in MetaMask. (oppure incolla un indirizzo già deployato → Carica)</li>
         <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
         <li>Apri un referendum e <b>vota</b>. (Se sei il governo, prima crealo dalla console.)</li>
       </ol>
-      <p class="note">⚠️ Serve <b>MetaMask</b> e i contratti deployati su <b>Sepolia</b>: deploya <code>SystemBootstrap</code> in Remix (rete Sepolia, ETH da un faucet), poi incolla qui sotto il suo indirizzo e premi <b>Carica</b>.</p>
+      <p class="note">⚠️ Serve <b>MetaMask</b> con un po' di <b>ETH di test</b> sulla rete scelta (Sepolia: ETH da un faucet; Anvil: account già finanziati). Il deploy si fa col bottone <b>🚀 Deploya sistema</b> qui sotto.</p>
     </section>
 
     <details class="card" id="cfgCard" open>
       <summary>⚙️ Configurazione contratti</summary>
-      <p class="muted">Deploya <code>SystemBootstrap</code> (Remix oppure <code>forge create</code>), incolla il suo indirizzo e premi <b>Carica</b>: ricava Router e Factory. In alternativa inseriscili a mano (es. output di <code>DeploySystem.s.sol</code>).</p>
+      <div class="deploy-box">
+        <span>🚀 <b>Modo rapido</b>: deploya l'intero sistema con un clic — il tuo wallet paga il gas sulla rete selezionata (Sepolia o Anvil). Niente Remix.</span>
+        <button id="deployBtn" class="btn btn--primary">Deploya sistema</button>
+      </div>
+      <p class="muted">Oppure, se hai già un <code>SystemBootstrap</code> deployato, incolla il suo indirizzo qui sotto e premi <b>Carica</b>.</p>
       <label class="field"><span>SystemBootstrap (consigliato)</span>
         <div class="row"><input id="bootAddr" spellcheck="false" placeholder="0x… (indirizzo del tuo SystemBootstrap su Sepolia)">
         <button id="loadBoot" class="btn">Carica</button></div>
@@ -80,6 +84,7 @@
   </main>
 
   <footer class="foot">Prototipo accademico INF0422 · SPID simulato · contratti Solidity (Foundry)</footer>
+  <script src="contracts.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
