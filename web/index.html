@@ -6,7 +6,7 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -88,7 +88,7 @@
     <div id="socialView" class="social hidden">
       <section class="social-hero">
         <h1>💬 Sondaggi della community</h1>
-        <p>Chiunque crea un sondaggio mettendo una piccola <b>cauzione</b> e chiunque vota (una volta). Se il sondaggio raggiunge la <b>soglia di voti</b>, il creatore <b>riprende la cauzione</b> 💸. Niente SPID: aperto a tutti.</p>
+        <p>Chiunque crea un sondaggio mettendo una piccola <b>cauzione</b> e chiunque vota (una volta). Quando il risultato diventa <b>statisticamente significativo</b> il sondaggio <b>vince</b> e il creatore <b>riprende la cauzione</b> 💸. Niente SPID: aperto a tutti.</p>
         <button id="connectSocial" class="btn btn--social btn--xl">Connetti wallet</button>
       </section>
 
@@ -96,12 +96,9 @@
         <h2>✨ Crea un sondaggio</h2>
         <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza 🍕 o Pasta 🍝?" autocomplete="off"></label>
         <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
-        <div class="grid2">
-          <label class="field"><span>Soglia di voti per vincere</span><input id="pollThreshold" type="number" min="1" value="5"></label>
-          <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
-        </div>
+        <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
         <button id="createPoll" class="btn btn--social btn--xl">🚀 Pubblica sondaggio</button>
-        <p class="note">La cauzione torna a te se il sondaggio raggiunge la soglia. Altrimenti resta bloccata (anti-spam).</p>
+        <p class="note">Niente soglia da impostare: il sondaggio <b>vince</b> quando il risultato è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione 💸, altrimenti resta bloccata (anti-spam).</p>
       </section>
 
       <div id="pollFeed" class="poll-feed"></div>
@@ -113,7 +110,7 @@
     <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
-  <script src="config.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

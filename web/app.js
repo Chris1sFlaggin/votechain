@@ -38,11 +38,11 @@ const REF_ABI = [
 ];
 const BOOTSTRAP_ABI = ["function addresses() view returns (address, address, address)"];
 const POLLHUB_ABI = [
-  "function createPoll(string, bytes32[], uint64) payable returns (uint256)",
+  "function createPoll(string, bytes32[]) payable returns (uint256)",
   "function vote(uint256, bytes32)",
   "function claim(uint256)",
   "function pollsCount() view returns (uint256)",
-  "function getPoll(uint256) view returns (address creator, string question, bytes32[] options, uint64 threshold, uint128 stake, uint64 totalVotes, bool won, bool claimed)",
+  "function getPoll(uint256) view returns (address creator, string question, bytes32[] options, uint128 stake, uint64 totalVotes, bool won, bool claimed)",
   "function optionVotes(uint256, bytes32) view returns (uint256)",
   "function hasVoted(uint256, address) view returns (bool)",
 ];
@@ -363,15 +363,13 @@ $("createPoll").onclick = async () => {
   if (!S.pollHub) return toast("Connetti il wallet su Sepolia (se manca, il gestore deve ridepoloyare con PollHub).", "err");
   const q = $("pollQ").value.trim();
   const opts = $("pollOpts").value.split("\n").map((s) => s.trim()).filter(Boolean);
-  const th = parseInt($("pollThreshold").value, 10);
   if (!q || opts.length < 2) return toast("Domanda + almeno 2 opzioni.", "err");
   if (opts.some((o) => o.length > 31)) return toast("Opzioni: max 31 caratteri.", "err");
-  if (!th || th < 1) return toast("Soglia di voti non valida.", "err");
   let value;
   try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
   const b32 = opts.map((o) => ethers.encodeBytes32String(o));
-  const ok = await tx(S.pollHub.createPoll(q, b32, th, { value }), "Sondaggio pubblicato! 🎉");
+  const ok = await tx(S.pollHub.createPoll(q, b32, { value }), "Sondaggio pubblicato! 🎉");
   if (ok) { $("pollQ").value = ""; $("pollOpts").value = ""; await renderPolls(); }
 };
 
@@ -389,7 +387,7 @@ async function renderPolls() {
 async function pollCard(id) {
   const p = await S.pollHub.getPoll(id);
   const creator = p.creator, question = p.question, optsRaw = p.options;
-  const threshold = Number(p.threshold), stake = p.stake, total = Number(p.totalVotes);
+  const stake = p.stake, total = Number(p.totalVotes);
   const won = p.won, claimed = p.claimed;
   const options = optsRaw.map((b) => ethers.decodeBytes32String(b));
   const voted = await S.pollHub.hasVoted(id, S.account).catch(() => false);
@@ -404,8 +402,15 @@ async function pollCard(id) {
       <span class="poll-opt__bar"><span style="width:${pct}%"></span></span></button>`;
   }).join("");
 
-  const prog = Math.min(100, Math.round((100 * total) / threshold));
-  const badge = won ? `<span class="won">🏆 VINTO</span>` : `<span class="prog-pill">${total}/${threshold}</span>`;
+  // significatività: serve total>=5 e (primo-secondo) > 2·√total
+  const sorted = [...counts].sort((a, b) => b - a);
+  const lead = (sorted[0] || 0) - (sorted[1] || 0);
+  const needLead = Math.floor(2 * Math.sqrt(total)) + 1;
+  let prog, progLabel;
+  if (won) { prog = 100; progLabel = "🏆 risultato statisticamente significativo"; }
+  else if (total < 5) { prog = Math.round((100 * total) / 5); progLabel = `${total}/5 voti minimi`; }
+  else { prog = Math.min(100, Math.round((100 * lead) / needLead)); progLabel = `vantaggio ${lead}/${needLead} per vincere (≈95%)`; }
+  const badge = won ? `<span class="won">🏆 VINTO</span>` : `<span class="prog-pill">${total} voti</span>`;
   let claim = "";
   if (isCreator && won && !claimed) claim = `<button class="btn btn--social poll-claim" data-claim="${id}">💸 Reclama cauzione (${ethers.formatEther(stake)} ETH)</button>`;
   else if (isCreator && claimed) claim = `<span class="muted">✔ cauzione riscattata</span>`;
@@ -415,7 +420,7 @@ async function pollCard(id) {
     <div class="poll__head">${avatar(creator)}<span class="addr">${creator.slice(0, 6)}…${creator.slice(-4)}</span>${tags}<span class="poll__stake">cauzione ${ethers.formatEther(stake)}Ξ</span>${badge}</div>
     <h3 class="poll__q">${escapeHtml(question)}</h3>
     <div class="poll__opts">${opts}</div>
-    <div class="poll__prog"><div class="poll__progbar"><div style="width:${prog}%"></div></div><span>${total} / ${threshold} voti per vincere</span></div>
+    <div class="poll__prog"><div class="poll__progbar"><div style="width:${prog}%"></div></div><span>${progLabel}</span></div>
     ${claim}
   </article>`;
 }

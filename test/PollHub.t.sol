@@ -5,13 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {PollHub} from "../src/social/PollHub.sol";
 import {Errors} from "../src/utils/Errors.sol";
 
-/// Sondaggi social: cauzione, soglia di voti, vittoria, rimborso della cauzione.
+/// Sondaggi social: cauzione + vittoria per significatività statistica + rimborso.
 contract PollHubTest is Test {
     PollHub hub;
     address creator = makeAddr("creator");
-    address a1 = makeAddr("a1");
-    address a2 = makeAddr("a2");
-    address a3 = makeAddr("a3");
     bytes32 constant SI = bytes32("si");
     bytes32 constant NO = bytes32("no");
 
@@ -26,72 +23,90 @@ contract PollHubTest is Test {
         o[1] = NO;
     }
 
+    // vota `n` opzioni `opt` da `n` indirizzi distinti (seed per evitare collisioni)
+    function _voteN(uint256 id, bytes32 opt, uint256 n, uint256 seed) internal {
+        for (uint256 i; i < n; i++) {
+            address v = makeAddr(string.concat("v", vm.toString(seed + i)));
+            vm.prank(v);
+            hub.vote(id, opt);
+        }
+    }
+
     function test_createRequiresStake() public {
         vm.prank(creator);
         vm.expectRevert(Errors.BadPoll.selector);
-        hub.createPoll("Q", _opts(), 3); // nessuna cauzione (msg.value 0)
+        hub.createPoll("Q", _opts()); // nessuna cauzione
     }
 
-    function test_create_vote_win_claim() public {
+    function test_winsOnStatisticalSignificance() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 0.01 ether}("Pizza o pasta?", _opts(), 3);
+        uint256 id = hub.createPoll{value: 0.01 ether}("Pizza o pasta?", _opts());
 
-        vm.prank(a1);
-        hub.vote(id, SI);
-        vm.prank(a2);
-        hub.vote(id, NO);
-        (,,,,, uint64 tv2, bool won2,) = hub.getPoll(id);
-        assertEq(tv2, 2);
-        assertFalse(won2); // soglia 3 non ancora raggiunta
+        _voteN(id, SI, 4, 1); // 4-0 ma total 4 < MIN_VOTES(5) -> non vince
+        (,,,,, bool won4,) = hub.getPoll(id);
+        assertFalse(won4);
 
-        vm.prank(a3);
-        hub.vote(id, SI); // 3° voto -> vince
-        (,,,, uint128 stake, uint64 tv3, bool won3,) = hub.getPoll(id);
-        assertEq(tv3, 3);
-        assertTrue(won3);
+        _voteN(id, SI, 1, 100); // 5° voto: 5-0, lead 5, 25 > 4*5=20 -> vince
+        (,,, uint128 stake, uint64 total, bool won5,) = hub.getPoll(id);
+        assertEq(total, 5);
+        assertTrue(won5);
 
         uint256 bal = creator.balance;
         vm.prank(creator);
-        hub.claim(id); // cauzione restituita
-        assertEq(creator.balance, bal + stake);
+        hub.claim(id);
+        assertEq(creator.balance, bal + stake); // cauzione restituita
+    }
+
+    function test_notSignificantNoWin() public {
+        vm.prank(creator);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        _voteN(id, SI, 3, 1);
+        _voteN(id, NO, 2, 50); // 3-2, total 5, lead 1, 1 > 20? no -> non vince
+        (,,,,, bool won,) = hub.getPoll(id);
+        assertFalse(won);
+        vm.prank(creator);
+        vm.expectRevert(Errors.PollNotWon.selector);
+        hub.claim(id);
     }
 
     function test_noDoubleVote() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts(), 5);
-        vm.prank(a1);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        address v = makeAddr("dv");
+        vm.prank(v);
         hub.vote(id, SI);
-        vm.prank(a1);
+        vm.prank(v);
         vm.expectRevert(Errors.AlreadyVoted.selector);
         hub.vote(id, NO);
     }
 
     function test_claimOnlyCreatorAndWon() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts(), 1);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
 
         vm.prank(creator);
         vm.expectRevert(Errors.PollNotWon.selector);
         hub.claim(id); // non ancora vinto
 
-        vm.prank(a1);
-        hub.vote(id, SI); // vince (soglia 1)
+        _voteN(id, SI, 5, 1); // 5-0 -> vince
 
-        vm.prank(a2);
+        address other = makeAddr("other");
+        vm.prank(other);
         vm.expectRevert(Errors.NotCreator.selector);
-        hub.claim(id); // non creatore
+        hub.claim(id);
 
         vm.prank(creator);
         hub.claim(id);
         vm.prank(creator);
         vm.expectRevert(Errors.AlreadyClaimed.selector);
-        hub.claim(id); // doppio claim
+        hub.claim(id);
     }
 
     function test_unknownOption() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts(), 2);
-        vm.prank(a1);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        address v = makeAddr("u");
+        vm.prank(v);
         vm.expectRevert(Errors.UnknownOption.selector);
         hub.vote(id, bytes32("xx"));
     }
