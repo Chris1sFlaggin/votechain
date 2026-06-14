@@ -10,6 +10,7 @@ library Errors {
     // SPID / geofencing (auth)
     error WalletNotAuthorized(); // wallet k_i never authorised via (simulated) SPID
     error OutOfJurisdiction(); // wallet authorised, but not for this referendum
+    error GovernmentCannotVote(); // separation of powers: the authority cannot vote
 
     // commit / reveal (core)
     error NonceGiaUtilizzato(); // digest already present in the referendum domain

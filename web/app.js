@@ -65,7 +65,7 @@ async function tx(promise, ok) {
 }
 function reason(e) {
   const s = e?.shortMessage || e?.reason || e?.message || String(e);
-  const m = s.match(/(NonceGiaUtilizzato|OutOfJurisdiction|WalletNotAuthorized|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|EmptyOptions)/);
+  const m = s.match(/(NonceGiaUtilizzato|OutOfJurisdiction|WalletNotAuthorized|GovernmentCannotVote|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|EmptyOptions)/);
   return m ? `Errore contratto: ${m[1]}` : s;
 }
 

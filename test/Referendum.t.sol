@@ -159,4 +159,13 @@ contract ReferendumTest is Test {
         vm.expectRevert(Errors.RevealClosed.selector);
         ref.reveal(SI, "z");
     }
+
+    function test_governmentCannotVote() public {
+        // even if the government enrols an SPID identity, it cannot commit a vote
+        vm.prank(govIT);
+        router.simulatedSpidLogin(keccak256("GOV-CF"), "Italia");
+        vm.prank(govIT);
+        vm.expectRevert(Errors.GovernmentCannotVote.selector);
+        ref.commit(_digest(SI, "g"));
+    }
 }

@@ -107,6 +107,8 @@ contract Referendum is IReferendum {
     /// @notice PHASE 1: publish a hiding digest of your vote (geofenced + unique).
     function commit(bytes32 d) external override {
         if (phase != Phase.Voting) revert Errors.VotingNotOpen();
+        // separation of powers: a government cannot vote in its own jurisdiction
+        if (router.isGovernment(msg.sender, jurisdiction)) revert Errors.GovernmentCannotVote();
         if (!router.canVote(msg.sender, jurisdiction)) {
             if (!router.isAuthorized(msg.sender)) revert Errors.WalletNotAuthorized();
             revert Errors.OutOfJurisdiction();
