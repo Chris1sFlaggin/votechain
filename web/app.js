@@ -1,12 +1,14 @@
-/* VoteChain dApp — static frontend. Talks straight to the Solidity contracts via
-   ethers.js + a browser wallet (MetaMask). No application backend. */
+/* VoteChain dApp — frontend statico (GitHub Pages + Sepolia). Solo wallet, niente backend.
+   Indirizzi dei contratti in config.js. Il "Governo" è l'account registrato on-chain
+   (chi ha deployato SystemBootstrap via Remix): a lui appare la console; gli altri votano. */
 
 const PHASES = ["Configurazione", "Votazione aperta", "Spoglio in corso", "Referendum chiuso"];
-const seenJur = new Set(["Italia", "San Marino"]); // jurisdictions offered in the datalist
 const LABELS = { si: "Sì", no: "No", bianca: "Scheda Bianca" };
+const seenJur = new Set(["Italia", "San Marino"]);
+const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "" };
 
 const ROUTER_ABI = [
-  "function simulatedSpidLogin(bytes32 cfHash)",
+  "function simulatedSpidLogin(bytes32 cfHash, string jurisdiction)",
   "function isAuthorized(address) view returns (bool)",
   "function jurisdictionOf(address) view returns (string)",
   "function canVote(address, string) view returns (bool)",
@@ -34,22 +36,10 @@ const REF_ABI = [
   "function setPhase(uint8)",
   "function close()",
 ];
-
-const BOOTSTRAP_ABI = [
-  "function addresses() view returns (address, address)",
-  "function router() view returns (address)",
-  "function factory() view returns (address)",
-];
-
-const LS = "votechain.cfg";
-const loadCfg = () => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } };
-const persistCfg = (c) => localStorage.setItem(LS, JSON.stringify(c));
-
-// Admin (deploy/config/governo) solo in locale; su GitHub Pages = solo voto.
-const IS_PUBLIC = !/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname);
-const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "" };
+const BOOTSTRAP_ABI = ["function addresses() view returns (address, address)"];
 
 const S = { provider: null, signer: null, account: null, router: null, factory: null };
+const ADDR = { router: "", factory: "" };
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
 const digestOf = (voteId, nonce) =>
@@ -58,7 +48,7 @@ const digestOf = (voteId, nonce) =>
 function toast(msg, kind = "ok") {
   const t = $("toast");
   t.textContent = msg; t.className = `toast toast--${kind}`;
-  setTimeout(() => t.classList.add("hidden"), 4500);
+  setTimeout(() => t.classList.add("hidden"), 5000);
 }
 async function tx(promise, ok) {
   try { toast("Transazione inviata…", "wait"); const r = await promise; await r.wait(); toast(ok, "ok"); return true; }
@@ -66,13 +56,13 @@ async function tx(promise, ok) {
 }
 function reason(e) {
   const s = e?.shortMessage || e?.reason || e?.message || String(e);
-  const m = s.match(/(NonceGiaUtilizzato|OutOfJurisdiction|WalletNotAuthorized|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|UnknownIdentity|EmptyOptions)/);
+  const m = s.match(/(NonceGiaUtilizzato|OutOfJurisdiction|WalletNotAuthorized|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|EmptyOptions)/);
   return m ? `Errore contratto: ${m[1]}` : s;
 }
 
 // ------------------------------------------------------------------ wallet
 $("connect").onclick = async () => {
-  if (!window.ethereum) return toast("MetaMask non rilevato.", "err");
+  if (!window.ethereum) return toast("MetaMask non rilevato: installa l'estensione.", "err");
   S.provider = new ethers.BrowserProvider(window.ethereum);
   await S.provider.send("eth_requestAccounts", []);
   S.signer = await S.provider.getSigner();
@@ -84,79 +74,33 @@ $("connect").onclick = async () => {
   $("connect").textContent = "Connesso";
   window.ethereum.on?.("accountsChanged", () => location.reload());
   window.ethereum.on?.("chainChanged", () => location.reload());
-  await ensureAddresses();
-  if (!initContracts()) toast(IS_PUBLIC ? "Sistema non ancora configurato." : "Imposta gli indirizzi (Admin).", "err");
+  const okAddr = await resolveAddresses();
+  if (!okAddr || !initContracts()) {
+    toast("Sistema non configurato per questa rete (controlla config.js / sei su Sepolia?).", "err");
+  }
   await refresh();
 };
 
+// Indirizzi: da CONFIG.router/factory, oppure ricavati da CONFIG.bootstrap.
+async function resolveAddresses() {
+  if (ethers.isAddress(CFG.router) && ethers.isAddress(CFG.factory)) {
+    ADDR.router = CFG.router; ADDR.factory = CFG.factory; return true;
+  }
+  if (ethers.isAddress(CFG.bootstrap) && S.signer) {
+    try {
+      const [r, f] = await new ethers.Contract(CFG.bootstrap, BOOTSTRAP_ABI, S.signer).addresses();
+      ADDR.router = r; ADDR.factory = f; return true;
+    } catch { return false; }
+  }
+  return false;
+}
+
 function initContracts() {
-  const r = $("routerAddr").value.trim(), f = $("factoryAddr").value.trim();
-  if (!ethers.isAddress(r) || !ethers.isAddress(f)) { S.router = null; S.factory = null; return false; }
-  S.router = new ethers.Contract(r, ROUTER_ABI, S.signer || S.provider);
-  S.factory = new ethers.Contract(f, FACTORY_ABI, S.signer || S.provider);
-  persistCfg({ boot: $("bootAddr").value.trim(), router: r, factory: f });
+  if (!ethers.isAddress(ADDR.router) || !ethers.isAddress(ADDR.factory)) { S.router = null; S.factory = null; return false; }
+  S.router = new ethers.Contract(ADDR.router, ROUTER_ABI, S.signer || S.provider);
+  S.factory = new ethers.Contract(ADDR.factory, FACTORY_ABI, S.signer || S.provider);
   return true;
 }
-
-// If only a SystemBootstrap address is known, derive Router/Factory from it.
-async function ensureAddresses() {
-  const ok = (id) => ethers.isAddress($(id).value.trim());
-  if (ok("routerAddr") && ok("factoryAddr")) return;
-  const b = $("bootAddr").value.trim();
-  if (!ethers.isAddress(b) || !S.signer) return;
-  try {
-    const [r, f] = await new ethers.Contract(b, BOOTSTRAP_ABI, S.signer).addresses();
-    $("routerAddr").value = r; $("factoryAddr").value = f;
-  } catch { /* indirizzo bootstrap non valido sulla rete corrente */ }
-}
-
-$("saveCfg").onclick = async () => {
-  if (initContracts()) { await refresh(); toast("Configurazione salvata.", "ok"); }
-  else toast("Indirizzi Router/Factory non validi.", "err");
-};
-
-$("loadBoot").onclick = async () => {
-  const b = $("bootAddr").value.trim();
-  if (!ethers.isAddress(b)) return toast("Indirizzo Bootstrap non valido.", "err");
-  const ro = S.provider || (window.ethereum ? new ethers.BrowserProvider(window.ethereum) : null);
-  if (!ro) return toast("Connetti il wallet prima.", "err");
-  try {
-    const [r, f] = await new ethers.Contract(b, BOOTSTRAP_ABI, ro).addresses();
-    $("routerAddr").value = r; $("factoryAddr").value = f;
-    if (initContracts()) { await refresh(); toast("Router/Factory caricati dal Bootstrap.", "ok"); }
-  } catch (e) { toast("Lettura Bootstrap fallita: " + reason(e), "err"); }
-};
-
-$("deployBtn").onclick = async () => {
-  if (!S.signer) return toast("Connetti il wallet prima.", "err");
-  if (typeof SYSTEM_BOOTSTRAP === "undefined") return toast("Bytecode non caricato (contracts.js).", "err");
-  try {
-    const net = await S.provider.getNetwork();
-    const nn = net.name && net.name !== "unknown" ? net.name : "chain " + net.chainId;
-    toast(`Deploy su ${nn}… conferma in MetaMask e attendi`, "wait");
-    const factory = new ethers.ContractFactory(SYSTEM_BOOTSTRAP.abi, SYSTEM_BOOTSTRAP.bytecode, S.signer);
-    const c = await factory.deploy();
-    await c.waitForDeployment();
-    $("bootAddr").value = await c.getAddress();
-    const [r, f] = await c.addresses();
-    $("routerAddr").value = r;
-    $("factoryAddr").value = f;
-    if (initContracts()) { await refresh(); toast("Sistema deployato! Ora crea l'identità SPID e vota.", "ok"); }
-  } catch (e) { toast("Deploy fallito: " + reason(e), "err"); }
-};
-
-$("adminToggle").onclick = () => $("adminArea").classList.toggle("hidden");
-
-$("addNet").onclick = async () => {
-  if (!window.ethereum) return toast("MetaMask non rilevato.", "err");
-  try {
-    await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
-      chainId: "0x7a69", chainName: "Anvil (local)", rpcUrls: ["http://127.0.0.1:8545"],
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    }] });
-    toast("Rete Anvil aggiunta a MetaMask.", "ok");
-  } catch (e) { toast(reason(e), "err"); }
-};
 
 // -------------------------------------------------------------------- SPID
 $("spidRandom").onclick = () => {
@@ -165,11 +109,11 @@ $("spidRandom").onclick = () => {
   $("spidCf").value = s;
 };
 $("spidLogin").onclick = async () => {
-  if (!S.router) return toast("Connetti il wallet e configura i contratti prima.", "err");
+  if (!S.router) return toast("Connetti il wallet (rete Sepolia) prima.", "err");
   const cf = $("spidCf").value.trim();
   const jur = $("spidJur").value.trim();
   if (!cf || !jur) return toast("Inserisci codice fiscale (qualsiasi) e giurisdizione.", "err");
-  // PoC privacy: name/surname are NEVER sent on-chain nor stored — only the pseudonym.
+  // PoC privacy: nome/cognome NON vengono inviati né salvati — solo lo pseudonimo.
   const cfHash = ethers.id(cf); // keccak256(utf8(cf))
   const ok = await tx(S.router.simulatedSpidLogin(cfHash, jur),
     "Identità SPID simulata creata — on-chain solo lo pseudonimo, niente nome/cognome.");
@@ -183,13 +127,12 @@ async function refreshSpidStatus() {
     const jur = auth ? await S.router.jurisdictionOf(S.account) : null;
     $("spidStatus").textContent = auth
       ? `✅ Wallet autorizzato — giurisdizione: ${jur}`
-      : "⚠️ Wallet non ancora autorizzato (fai il login SPID simulato).";
+      : "⚠️ Wallet non ancora autorizzato (crea l'identità SPID simulata).";
   } catch { $("spidStatus").textContent = ""; }
 }
 
 // ---------------------------------------------------------------- governo
 async function refreshGovPanel() {
-  if (IS_PUBLIC) return;            // console governo non disponibile sul sito pubblico
   if (!S.router || !S.account) return;
   const jurs = [];
   for (const j of ["Italia", "San Marino"]) {
@@ -220,23 +163,18 @@ async function refresh() {
 
 async function renderReferenda() {
   const box = $("referenda");
-  if (!S.factory) { box.innerHTML = ""; return; }
+  if (!S.factory) { box.innerHTML = `<p class="muted">Connetti il wallet su Sepolia per vedere i referendum.</p>`; return; }
   let addrs = [];
   try { addrs = await S.factory.getReferenda(); } catch (e) { box.innerHTML = `<p class="muted">Impossibile leggere i referendum: ${reason(e)}</p>`; return; }
-  if (!addrs.length) { box.innerHTML = `<p class="muted">Nessun referendum on-chain.</p>`; return; }
+  if (!addrs.length) { box.innerHTML = `<p class="muted">Nessun referendum ancora emanato.</p>`; return; }
   const cards = await Promise.all(addrs.map(card));
   box.innerHTML = cards.join("");
   wireCards();
   updateJurList();
 }
 
-function updateJurList() {
-  const dl = $("jurList");
-  if (dl) dl.innerHTML = [...seenJur].map((j) => `<option>${j}</option>`).join("");
-}
-
 async function card(addr) {
-  const c = new ethers.Contract(addr, REF_ABI, S.signer);
+  const c = new ethers.Contract(addr, REF_ABI, S.signer || S.provider);
   const [title, jur, gov, phaseRaw, finalized, optsRaw] = await Promise.all([
     c.title(), c.jurisdiction(), c.government(), c.phase(), c.finalized(), c.getOptions(),
   ]);
@@ -255,10 +193,10 @@ async function card(addr) {
   if (phase === 1 && canVote) actions += voteForm(addr, options);
   if ((phase === 1 || phase === 2) && me && me.committed) actions += revealForm(addr, options, phase === 1);
   if (phase === 1 && !canVote && S.account)
-    actions += `<p class="muted">Non puoi votare qui (fuori giurisdizione o login SPID mancante).</p>`;
+    actions += `<p class="muted">Per votare crea prima l'identità SPID per la giurisdizione «${jur}».</p>`;
 
   let govCtl = "";
-  if (isGov && !IS_PUBLIC) {
+  if (isGov) {
     govCtl = `<div class="gov-ctl">
       <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="1" ${phase === 1 || finalized ? "disabled" : ""}>Apri voto</button>
       <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="2" ${phase !== 1 ? "disabled" : ""}>Spoglio</button>
@@ -285,7 +223,6 @@ async function tallyCounts(c, optsRaw, options, finalized) {
     for (let i = 0; i < optsRaw.length; i++) out[options[i]] = Number(await c.result(optsRaw[i]));
     return out;
   }
-  // provisional: replicate close() off-chain over the voters
   options.forEach((o) => (out[o] = 0));
   try {
     const voters = await c.getVoters();
@@ -357,13 +294,7 @@ function wireCards() {
   });
 }
 
-(function initUI() {
-  const c = loadCfg();
-  $("bootAddr").value = c.boot || CFG.bootstrap || "";
-  $("routerAddr").value = c.router || CFG.router || "";
-  $("factoryAddr").value = c.factory || CFG.factory || "";
-  if (IS_PUBLIC) {            // nascondi admin sul sito pubblico
-    $("adminToggle").classList.add("hidden");
-    $("adminArea").classList.add("hidden");
-  }
-})();
+function updateJurList() {
+  const dl = $("jurList");
+  if (dl) dl.innerHTML = [...seenJur].map((j) => `<option>${j}</option>`).join("");
+}
