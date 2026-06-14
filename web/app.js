@@ -74,6 +74,17 @@ $("connect").onclick = async () => {
   $("connect").textContent = "Connesso";
   window.ethereum.on?.("accountsChanged", () => location.reload());
   window.ethereum.on?.("chainChanged", () => location.reload());
+  // rete sbagliata? chiedi a MetaMask di passare a quella dei contratti (Sepolia)
+  if (CFG.chainId && Number(net.chainId) !== Number(CFG.chainId)) {
+    toast(`Rete sbagliata (chain ${net.chainId}). Passa a Sepolia.`, "err");
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x" + Number(CFG.chainId).toString(16) }],
+      });
+    } catch { /* l'utente cambia rete a mano; chainChanged ricarica la pagina */ }
+    return;
+  }
   const okAddr = await resolveAddresses();
   if (!okAddr || !initContracts()) {
     toast("Sistema non configurato per questa rete (controlla config.js / sei su Sepolia?).", "err");
