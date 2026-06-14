@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VoteChain · dApp referendum</title>
+  <title>VoteChain · referendum su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body>
   <header class="nav">
-    <div class="brand"><span aria-hidden="true">⛓</span> Vote<strong>Chain</strong> <small>dApp · Sepolia · 100% on-chain</small></div>
+    <div class="brand"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
     <div class="nav__right">
-      <span id="who" class="who hidden"></span>
+      <span id="identity" class="identity hidden"></span>
       <button id="connect" class="btn btn--primary">Connetti wallet</button>
     </div>
   </header>
@@ -21,49 +21,72 @@
   <div id="toast" class="toast hidden"></div>
 
   <main class="wrap">
-    <section class="card howto">
-      <h2>Come si vota</h2>
-      <ol class="steps-list">
-        <li><b>Connetti wallet</b> (MetaMask) sulla rete <b>Sepolia</b>.</li>
-        <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
-        <li>Apri un referendum, <b>vota</b> (scelta + nonce segreto) e poi <b>rivela</b> col nonce.</li>
-      </ol>
-      <p class="note">I dati personali non finiscono on-chain: solo l'hash del codice fiscale (pseudonimo) e la giurisdizione. Chi possiede l'account del <b>Governo</b> vede la console per emanare referendum e gestire le fasi.</p>
-    </section>
 
-    <!-- Console Governo: appare solo se l'account connesso è registrato come governo on-chain -->
-    <section class="card hidden" id="govCard">
-      <h2>🏛 Console Governo</h2>
-      <p class="muted">Sei governo per: <b id="govJurs"></b>. Emana un nuovo referendum (deploy on-chain via <code>GovFactory</code>).</p>
-      <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Referendum 2026"></label>
-      <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
-      <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
-      <button id="createRef" class="btn btn--gov">📜 Emana referendum</button>
-    </section>
-
-    <section class="card" id="spidCard">
-      <h2>🔐 Accesso SPID (simulato)</h2>
-      <p class="muted">Crea un'identità SPID <b>fittizia</b> (PoC). Nome e cognome sono solo a scopo dimostrativo: <b>non vengono inviati on-chain, non vengono salvati e non vengono mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
-      <div class="grid2">
-        <label class="field"><span>Nome (non salvato)</span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
-        <label class="field"><span>Cognome (non salvato)</span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
-        <label class="field"><span>Codice fiscale (qualsiasi → pseudonimo)</span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
-        <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
+    <!-- ===================== LANDING (non connesso) ===================== -->
+    <section id="landing" class="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+      <p class="hero__eyebrow">Referendum digitali · testnet Sepolia</p>
+      <h1 class="hero__title">Vota sulla blockchain,<br>il tuo voto resta segreto</h1>
+      <p class="hero__sub">Identità SPID simulata, commit–reveal con nonce, conteggio verificabile on-chain. Nessun dato personale sulla catena.</p>
+      <button id="connectHero" class="btn btn--primary btn--xl">Connetti wallet per iniziare</button>
+      <div class="chips">
+        <div class="chip"><span>1</span> Connetti MetaMask (Sepolia)</div>
+        <div class="chip"><span>2</span> Crea identità SPID</div>
+        <div class="chip"><span>3</span> Vota e rivela</div>
       </div>
-      <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
-      <div class="row">
-        <button id="spidLogin" class="btn btn--spid">Crea identità SPID simulata</button>
-        <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
-      </div>
-      <p id="spidStatus" class="muted"></p>
     </section>
 
-    <h2 class="section-title">Referendum on-chain</h2>
-    <div id="referenda" class="ref-grid"></div>
+    <!-- ===================== AREA GOVERNO ===================== -->
+    <section id="govArea" class="hidden">
+      <div class="role-banner role-banner--gov">
+        <div><b>🏛 Pannello Governo</b><span>Sei l'autorità per: <b id="govJurs"></b>. Emani i referendum; i cittadini votano dal proprio account.</span></div>
+      </div>
+      <section class="card">
+        <h2>Emana un referendum</h2>
+        <div class="grid2">
+          <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Es. Referendum Costituzionale 2026"></label>
+          <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
+        </div>
+        <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
+        <button id="createRef" class="btn btn--gov btn--xl">📜 Emana referendum</button>
+      </section>
+    </section>
+
+    <!-- ===================== AREA CITTADINO ===================== -->
+    <section id="citizenArea" class="hidden">
+      <div class="role-banner role-banner--cit">
+        <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Crea un'identità SPID simulata per poter votare.</span></div>
+      </div>
+      <section class="card" id="spidCard">
+        <h2>🔐 Accesso SPID <small>(simulato)</small></h2>
+        <p class="muted">PoC: nome e cognome sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
+        <div class="grid2">
+          <label class="field"><span>Nome <em>(non salvato)</em></span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
+          <label class="field"><span>Cognome <em>(non salvato)</em></span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
+          <label class="field"><span>Codice fiscale <em>(qualsiasi → pseudonimo)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
+          <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
+        </div>
+        <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
+        <div class="row">
+          <button id="spidLogin" class="btn btn--spid btn--xl">Crea identità SPID</button>
+          <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- ===================== REFERENDUM (entrambi i ruoli) ===================== -->
+    <section id="voteSection" class="hidden">
+      <h2 class="section-title">Referendum on-chain</h2>
+      <div id="referenda" class="ref-grid"></div>
+    </section>
+
   </main>
 
-  <footer class="foot">Prototipo accademico INF0422 · SPID simulato · contratti Solidity su Sepolia</footer>
-  <script src="config.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <footer class="foot">
+    <span>Prototipo accademico INF0422 · SPID simulato · contratti Solidity su <b>Sepolia</b></span>
+  </footer>
+
+  <script src="config.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
