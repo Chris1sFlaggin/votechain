@@ -21,6 +21,18 @@
   <div id="toast" class="toast hidden"></div>
 
   <main class="wrap">
+    <section class="card howto">
+      <h2>Come si usa</h2>
+      <ol class="steps-list">
+        <li><b>Connetti wallet</b> (MetaMask) — bottone in alto a destra.</li>
+        <li>In MetaMask scegli la <b>rete</b>: <b>Sepolia</b> (consigliata per il sito pubblico) oppure Anvil locale.</li>
+        <li><b>Deploya i contratti</b>: in Remix deploya <code>SystemBootstrap</code> sulla stessa rete, copia il suo indirizzo, incollalo qui sotto in <b>Configurazione</b> → <b>Carica</b>.</li>
+        <li><b>Crea un'identità SPID</b> simulata (un codice fiscale qualsiasi).</li>
+        <li>Apri un referendum e <b>vota</b>. (Se sei il governo, prima crealo dalla console.)</li>
+      </ol>
+      <p class="note">⚠️ Serve <b>MetaMask</b> e i contratti già deployati sulla rete selezionata. L'indirizzo <code>0x5FbD…</code> preinserito vale <b>solo per Anvil locale</b>: su Sepolia incolla l'indirizzo del <b>tuo</b> deploy di <code>SystemBootstrap</code>.</p>
+    </section>
+
     <details class="card" id="cfgCard" open>
       <summary>⚙️ Configurazione contratti</summary>
       <p class="muted">Deploya <code>SystemBootstrap</code> (Remix oppure <code>forge create</code>), incolla il suo indirizzo e premi <b>Carica</b>: ricava Router e Factory. In alternativa inseriscili a mano (es. output di <code>DeploySystem.s.sol</code>).</p>

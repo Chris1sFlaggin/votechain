@@ -60,8 +60,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);border-col
 .opt{display:flex;align-items:center;gap:.3rem;font-size:.9rem}
 .opt input{width:auto}
 
-.toast{position:fixed;top:1rem;right:1rem;z-index:50;padding:.7rem 1rem;border-radius:10px;
-  color:#fff;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:340px}
+.toast{position:fixed;bottom:1rem;right:1rem;z-index:50;padding:.7rem 1rem;border-radius:10px;
+  color:#fff;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:340px;pointer-events:none}
 .toast--ok{background:var(--ok)} .toast--err{background:var(--err)} .toast--wait{background:var(--blue)}
+
+.howto{border-left:4px solid var(--blue)}
+.steps-list{margin:.4rem 0 .2rem 1.1rem;padding:0;line-height:1.65}
+.steps-list li{margin:.15rem 0}
 
 .foot{text-align:center;color:var(--mut);font-size:.8rem;padding:2rem 1rem}
