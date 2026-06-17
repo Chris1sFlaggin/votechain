@@ -63,11 +63,11 @@
         </div>
         <section class="card" id="spidCard">
           <h2>🔐 Accesso SPID <small>(simulato)</small></h2>
-          <p class="muted">PoC: nome e cognome sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce solo l'<b>hash del codice fiscale</b> (pseudonimo) e la giurisdizione.</p>
+          <p class="muted">PoC: nome, cognome e codice fiscale sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce <b>solo la giurisdizione</b> scelta — nessun dato personale, nemmeno uno pseudonimo.</p>
           <div class="grid2">
             <label class="field"><span>Nome <em>(non salvato)</em></span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
             <label class="field"><span>Cognome <em>(non salvato)</em></span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
-            <label class="field"><span>Codice fiscale <em>(qualsiasi → pseudonimo)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
+            <label class="field"><span>Codice fiscale <em>(solo a video, non salvato)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
             <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
           </div>
           <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>

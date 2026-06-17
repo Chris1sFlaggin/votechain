@@ -11,11 +11,11 @@ import {Errors} from "../utils/Errors.sol";
 ///         geofenced through the SPIDWalletRouter. The vote stays hidden behind the
 ///         digest keccak256(vote, nonce) until reveal.
 ///
-///  PHASE 1 VOTING  — commit(digest); verifica() rejects a digest already present
+///  PHASE 1 VOTING  — commit(digest) only; verifica() rejects a digest already present
 ///                    (nonce uniqueness); re-voting allowed, only the last counts.
-///                    Early reveal already possible.
-///  PHASE 2 TALLY   — no new digests; reveal stays open.
-///  reveal(vote,nonce) [phase 1 or 2] — publishes the vote IN CLEAR in ANY case;
+///                    NO reveal here, so no running tally exists before the spoglio.
+///  PHASE 2 TALLY   — no new digests; reveal opens.
+///  reveal(vote,nonce) [phase 2 only] — publishes the vote IN CLEAR in ANY case;
 ///                    the last reveal is kept; the `matches` flag is UX-only.
 ///  PHASE 3 CLOSED  — close() counts, per wallet, the last reveal iff
 ///                    keccak256(lastVote, lastNonce) == lastDigest.
@@ -126,9 +126,9 @@ contract Referendum is IReferendum {
         emit Committed(msg.sender, d, revisions[msg.sender]);
     }
 
-    /// @notice PHASE 1 or 2: reveal. Recorded IN CLEAR in ANY case; last reveal kept.
+    /// @notice PHASE 2 (Tally) only: reveal. Recorded IN CLEAR in ANY case; last reveal kept.
     function reveal(bytes32 vote, string calldata nonce) external override {
-        if (phase != Phase.Voting && phase != Phase.Tally) revert Errors.RevealClosed();
+        if (phase != Phase.Tally) revert Errors.RevealClosed();
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) revert Errors.NoVote();
         if (!b.revealed) {

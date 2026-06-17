@@ -34,9 +34,9 @@ contract CommitRevealTest is Test {
         ref = Referendum(factory.createReferendum("R", "Italia", opts));
 
         vm.prank(alice);
-        router.simulatedSpidLogin(keccak256("CF-ALICE"), "Italia");
+        router.simulatedSpidLogin("Italia");
         vm.prank(bob);
-        router.simulatedSpidLogin(keccak256("CF-BOB"), "Italia");
+        router.simulatedSpidLogin("Italia");
     }
 
     function _d(bytes32 v, string memory n) internal pure returns (bytes32) {

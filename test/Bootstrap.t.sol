@@ -31,10 +31,16 @@ contract BootstrapTest is Test {
         assertTrue(router.isGovernment(gov, "San Marino"));
     }
 
+    function test_extraGovernmentRegistered() public view {
+        address extra = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
+        assertTrue(router.isGovernment(extra, "Italia"));
+        assertTrue(router.isGovernment(extra, "San Marino"));
+    }
+
     function test_selfEnrollAndGeofencing() public {
         // anyone can self-enrol a fake SPID identity for a chosen jurisdiction
         vm.prank(voter);
-        router.simulatedSpidLogin(keccak256("any-fake-cf"), "Italia");
+        router.simulatedSpidLogin("Italia");
         assertTrue(router.canVote(voter, "Italia"));
         assertFalse(router.canVote(voter, "San Marino"));
     }
@@ -47,7 +53,7 @@ contract BootstrapTest is Test {
         Referendum r = Referendum(factory.createReferendum("Ref", "Italia", opts));
 
         vm.prank(voter);
-        router.simulatedSpidLogin(keccak256("any-fake-cf"), "Italia");
+        router.simulatedSpidLogin("Italia");
 
         bytes32 digest = keccak256(abi.encodePacked(bytes32("si"), "n1"));
         vm.prank(voter);

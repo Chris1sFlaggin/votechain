@@ -23,11 +23,6 @@ contract ReferendumTest is Test {
     bytes32 constant NO = bytes32("no");
     bytes32 constant BIANCA = bytes32("bianca");
 
-    // pseudonyms = keccak256(codice fiscale); any bytes32 works (no anagrafe)
-    bytes32 cfAlice = keccak256("CF-ALICE");
-    bytes32 cfBob = keccak256("CF-BOB");
-    bytes32 cfSara = keccak256("CF-SARA");
-
     function setUp() public {
         router = new SPIDWalletRouter(); // this test = ADMIN + ORACLE
         factory = new GovFactory(router);
@@ -36,13 +31,13 @@ contract ReferendumTest is Test {
         vm.prank(govIT);
         ref = Referendum(factory.createReferendum("Referendum Test", "Italia", _opts()));
 
-        // voters self-enrol a (fake) SPID identity for a jurisdiction
+        // voters self-enrol a (fake) SPID identity for a jurisdiction (no CF on-chain)
         vm.prank(alice);
-        router.simulatedSpidLogin(cfAlice, "Italia");
+        router.simulatedSpidLogin("Italia");
         vm.prank(bob);
-        router.simulatedSpidLogin(cfBob, "Italia");
+        router.simulatedSpidLogin("Italia");
         vm.prank(sara);
-        router.simulatedSpidLogin(cfSara, "San Marino");
+        router.simulatedSpidLogin("San Marino");
     }
 
     function _opts() internal pure returns (bytes32[] memory a) {
@@ -86,20 +81,33 @@ contract ReferendumTest is Test {
         assertEq(ref.revisions(alice), 2);
     }
 
-    function test_earlyRevealAndTallyCount() public {
+    /// Reveal is NOT allowed while voting is open: no running tally can be built
+    /// before the spoglio (presidential-style secrecy).
+    function test_revealBlockedDuringVoting() public {
+        vm.prank(alice);
+        ref.commit(_digest(SI, "an"));
+        vm.prank(alice);
+        vm.expectRevert(Errors.RevealClosed.selector);
+        ref.reveal(SI, "an");
+    }
+
+    /// Reveals happen only in Tally; last reveal per wallet wins; count at close.
+    function test_tallyCountAfterReveal() public {
         vm.prank(alice);
         ref.commit(_digest(NO, "an"));
-        vm.prank(alice);
-        ref.reveal(NO, "wrong"); // early reveal, mismatch, still recorded
-        vm.prank(alice);
-        ref.reveal(NO, "an"); // correct (last reveal wins)
         vm.prank(bob);
         ref.commit(_digest(SI, "bn"));
 
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
+
+        vm.prank(alice);
+        ref.reveal(NO, "wrong"); // mismatch, still recorded in clear
+        vm.prank(alice);
+        ref.reveal(NO, "an"); // correct (last reveal wins)
         vm.prank(bob);
         ref.reveal(SI, "bn");
+
         vm.prank(govIT);
         ref.close();
 
@@ -163,7 +171,7 @@ contract ReferendumTest is Test {
     function test_governmentCannotVote() public {
         // even if the government enrols an SPID identity, it cannot commit a vote
         vm.prank(govIT);
-        router.simulatedSpidLogin(keccak256("GOV-CF"), "Italia");
+        router.simulatedSpidLogin("Italia");
         vm.prank(govIT);
         vm.expectRevert(Errors.GovernmentCannotVote.selector);
         ref.commit(_digest(SI, "g"));

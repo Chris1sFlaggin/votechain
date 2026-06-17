@@ -18,6 +18,10 @@ contract SystemBootstrap {
     GovFactory public factory;
     PollHub public pollHub;
 
+    /// @notice Extra government wallet pre-registered at deploy, besides the deployer
+    ///         (so it can issue/manage referenda from the dApp's government panel).
+    address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
+
     event SystemReady(address router, address factory, address pollHub, address government);
 
     constructor() {
@@ -30,6 +34,10 @@ contract SystemBootstrap {
         router.grantRole(router.ORACLE(), human);
         router.registerGovernment(human, "Italia");
         router.registerGovernment(human, "San Marino");
+
+        // a second, fixed government wallet (Italia + San Marino)
+        router.registerGovernment(EXTRA_GOV, "Italia");
+        router.registerGovernment(EXTRA_GOV, "San Marino");
 
         emit SystemReady(address(router), address(factory), address(pollHub), human);
     }

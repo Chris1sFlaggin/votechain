@@ -5,9 +5,6 @@ geofencing, autorizzazione SPID (simulata), commit/reveal, conteggio. Pensato pe
 essere guidato da un **frontend statico** (ethers.js + wallet, es. MetaMask),
 senza backend applicativo.
 
-> Il prototipo Flask in `../` resta come demo Python; questo package è la versione
-> **incentrata su Solidity** richiesta per l'elaborato.
-
 ## Struttura
 
 ```
@@ -41,15 +38,16 @@ remix/
 
 ## Ciclo di vita (in `Referendum.sol`)
 
-- **Fase 1 — Voting**: `commit(digest)` con `digest = keccak256(voto, nonce)`.
+- **Fase 1 — Voting**: solo `commit(digest)` con `digest = keccak256(voto, nonce)`.
   `verifica()` rifiuta un digest già presente nel dominio del referendum →
   ogni nonce è univoco. Rivoto consentito (nuovo nonce), conta solo l'ultimo.
-  Reveal già possibile (conferma anticipata).
-- **Fase 2 — Tally (spoglio)**: niente nuovi digest; `reveal` resta aperto.
-- **`reveal(voto, nonce)`** (Fase 1 o 2): pubblica il voto **in chiaro in ogni
+  **Nessun reveal qui**: prima dello spoglio non esiste alcun conteggio.
+- **Fase 2 — Tally (spoglio)**: niente nuovi digest; **si apre il `reveal`**.
+- **`reveal(voto, nonce)`** (solo Fase 2): pubblica il voto **in chiaro in ogni
   caso**; vale l'ultimo reveal; il flag `matches` è solo per la UX.
 - **Fase 3 — Closed**: `close()` conteggia on-chain, per ogni wallet, l'ultimo
-  reveal **se** `keccak256(ultimoVoto, ultimoNonce) == ultimoDigest`.
+  reveal **se** `keccak256(ultimoVoto, ultimoNonce) == ultimoDigest`. Gli esiti
+  sono visibili **solo da qui** (prima restano sigillati anche nella UI).
 
 ## SPID simulato pensato per il sito statico
 
@@ -58,16 +56,16 @@ SPID reale è off-chain (IdP accreditato): non gira in una pagina statica. Qui �
 **fittizia auto-creata** (nessun profilo preimpostato):
 
 1. il cittadino crea un'identità SPID finta dal **proprio wallet** `k_i` (MetaMask):
-   `simulatedSpidLogin(cfHash, giurisdizione)` → il wallet viene autorizzato per la
+   `simulatedSpidLogin(giurisdizione)` → il wallet viene autorizzato per la
    giurisdizione scelta;
-2. **privacy (PoC)**: nome e cognome sono solo a video, **non vengono inviati
-   on-chain né salvati né mostrati**. On-chain finisce solo `cfHash =
-   keccak256(codice fiscale)` (pseudonimo) + la giurisdizione;
+2. **privacy (PoC)**: nome, cognome e codice fiscale sono solo a video, **non
+   vengono inviati on-chain né salvati né mostrati**. On-chain finisce **solo la
+   giurisdizione** scelta — nessun dato personale, nemmeno uno pseudonimo;
 3. il **geofencing** è applicato on-chain: `Referendum.commit` chiama
    `router.canVote(msg.sender, giurisdizione)`.
 
 > ⚠️ PoC: `simulatedSpidLogin` si fida del chiamante (chiunque può auto-iscrivere
-> uno pseudonimo/giurisdizione). In produzione l'autorizzazione la scriverebbe un
+> una giurisdizione). In produzione l'autorizzazione la scriverebbe un
 > oracolo off-chain dopo una vera asserzione SPID, vincolando la giurisdizione
 > all'identità verificata. Vedi nota in cima a `SPIDWalletRouter.sol`.
 
@@ -77,7 +75,7 @@ SPID reale è off-chain (IdP accreditato): non gira in una pagina statica. Qui �
 # build
 forge build
 
-# test (16 test: fasi, geofencing, unicità nonce, multi-reveal, annullamento)
+# test (28 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
 forge test -vv
 
 # deploy locale
@@ -86,7 +84,14 @@ forge script script/DeploySystem.s.sol \
      --rpc-url http://127.0.0.1:8545 \
      --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
      --broadcast
-# stampa gli indirizzi di SPIDWalletRouter / GovFactory / Referendum
+# stampa gli indirizzi di SPIDWalletRouter / GovFactory / PollHub / Referendum
+
+# deploy su Sepolia (serve una chiave con ETH di test + un RPC)
+export SEPOLIA_RPC="https://sepolia.infura.io/v3/<API_KEY>"
+forge script script/DeploySystem.s.sol \
+     --rpc-url "$SEPOLIA_RPC" --private-key 0x<chiave-con-ETH-di-test> --broadcast
+# poi incolla gli indirizzi stampati in web/config.js (router/factory/pollHub),
+# oppure deploya SystemBootstrap da Remix e incolla solo `bootstrap`.
 ```
 
 ## Frontend statico (`web/`)
@@ -118,12 +123,13 @@ Le chiamate che il frontend fa ai contratti (identiche all'e2e provato con
 `cast`):
 
 ```js
-await router.simulatedSpidLogin(ethers.id("<codice-fiscale-finto>"), "Italia"); // self-enroll
+await router.simulatedSpidLogin("Italia");   // self-enroll (solo giurisdizione on-chain)
 const vote   = ethers.encodeBytes32String("si");
 const digest = ethers.solidityPackedKeccak256(["bytes32","string"], [vote, "tramonto-42"]);
-await referendum.commit(digest);            // Fase 1
-await referendum.reveal(vote, "tramonto-42");// Fase 1 o 2
-await referendum.setPhase(2); await referendum.close(); // governo
+await referendum.commit(digest);             // Fase 1 (commit)
+await referendum.setPhase(2);                // governo: apre lo spoglio
+await referendum.reveal(vote, "tramonto-42");// Fase 2 (reveal solo qui)
+await referendum.close();                    // governo: conteggio ufficiale
 ```
 
 Letture (stato, opzioni, risultati, conteggio provvisorio) via `IReferendum` ed
@@ -139,22 +145,23 @@ Senza installare nulla, su <https://remix.ethereum.org>:
 3. **Deploy & Run** → Environment:
    - *Remix VM* per provare offline, oppure
    - *Injected Provider — MetaMask* per deployare su **Sepolia** (serve un po' di ETH di test).
-4. Deploya **`SystemBootstrap`** (un clic): crea Router + Factory e ti rende
-   ADMIN/ORACLE e governo di Italia e San Marino.
+4. Deploya **`SystemBootstrap`** (un clic): crea Router + Factory + PollHub, ti rende
+   ADMIN/ORACLE e governo di Italia e San Marino, e registra anche un **secondo
+   wallet governativo fisso** (`EXTRA_GOV = 0x22a2…834B54`).
 5. Espandi `SystemBootstrap` → leggi `router()` e `factory()` (o `addresses()`).
 6. *At Address* su `GovFactory` (indirizzo `factory()`) → `createReferendum("Titolo","Italia",["0x7369…","0x6e6f…"])`
    (le opzioni sono `bytes32`: usa *string → bytes32* o `cast format-bytes32-string`).
-7. Da un altro account: *At Address* su `SPIDWalletRouter` → `simulatedSpidLogin(cfHash, "Italia")`
-   (`cfHash` = `keccak256` di un codice fiscale **qualsiasi** — identità fittizia,
-   nessun profilo preimpostato), poi `commit/reveal` sul `Referendum`.
+7. Da un altro account: *At Address* su `SPIDWalletRouter` → `simulatedSpidLogin("Italia")`
+   (identità fittizia, **nessun dato personale on-chain**), poi `commit` (Fase 1) e,
+   dopo che il governo apre lo spoglio, `reveal` (Fase 2) sul `Referendum`.
 
-I 19 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
+I 28 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
 
 ## Deploy su GitHub Pages
 
 Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
 
-1. Porta la cartella `sol/` su un repo GitHub (è già un repo git con `forge init`):
+1. Porta la cartella `votechain/` su un repo GitHub (è già un repo git con `forge init`):
    `git add -A && git commit -m "votechain" && git push`.
 2. Repo → **Settings → Pages → Source: GitHub Actions**. Il workflow
    `.github/workflows/pages.yml` pubblica `web/` a ogni push su `main`/`master`.
@@ -178,7 +185,10 @@ Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
 | `digest = keccak256(voto, nonce)` | `VoteVerifier.digest` |
 | `verifica()` unicità del digest | `VoteVerifier.verifica` + `usedDigest` in `Referendum.commit` |
 | Rivoto con nonce nuovo, vale l'ultimo | `Referendum.commit` (lastDigest) |
-| Reveal in chiaro in ogni caso, Fase 1+2, multi-reveal | `Referendum.reveal` (nessun require di match) |
+| Reveal in chiaro in ogni caso, **solo Fase 2 (spoglio)**, multi-reveal | `Referendum.reveal` (gate su `Phase.Tally`) |
 | Conteggio differito alla chiusura | `Referendum.close` |
+| Esiti sigillati fino alla chiusura | reveal solo in spoglio + UI mostra le barre solo se `finalized` |
+| Nessun dato personale on-chain (solo giurisdizione) | `SPIDWalletRouter` (niente `cfHash`) |
 | Ruoli Governo/Oracolo/Admin | `Roles.sol` + registrazioni nel Router |
+| Secondo wallet governativo fisso | `SystemBootstrap.EXTRA_GOV` (Italia + San Marino) |
 | Custom errors | `Errors.sol` |

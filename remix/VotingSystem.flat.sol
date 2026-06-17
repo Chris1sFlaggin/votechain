@@ -285,20 +285,20 @@ abstract contract Roles {
 /// @notice On-chain projection of the off-chain SPID step. A real accredited IdP
 ///         cannot run on-chain; here a citizen self-enrols from their own wallet k_i
 ///         (e.g. MetaMask) declaring a jurisdiction — a pure PoC of the flow.
-///         NO personal data is involved: only keccak256(codice fiscale) — a
-///         pseudonym — is passed; name/surname never reach the chain and are never
-///         stored. Governments are registered per jurisdiction by the ADMIN.
-///         Geofencing is enforced on-chain via canVote()/isGovernment().
+///         NO personal data reaches the chain — not even a pseudonym: only the
+///         chosen jurisdiction is stored, bound to the wallet k_i. Name, surname and
+///         codice fiscale never leave the client. Governments are registered per
+///         jurisdiction by the ADMIN. Geofencing is enforced on-chain via
+///         canVote()/isGovernment().
 ///
 /// @dev SECURITY (PoC): simulatedSpidLogin() trusts the caller — anyone can enrol any
-///      pseudonym/jurisdiction. In production an accredited IdP + off-chain oracle
+///      jurisdiction. In production an accredited IdP + off-chain oracle
 ///      would issue the authorisation (binding the jurisdiction to the verified
 ///      identity) before it is written here.
 contract SPIDWalletRouter is Roles {
     struct Wallet {
         bool authorized;
         string jurisdiction;
-        bytes32 cfHash; // pseudonym = keccak256(codice fiscale); no name on-chain
     }
 
     mapping(address => Wallet) private _wallets; // k_i => authorisation
@@ -306,7 +306,7 @@ contract SPIDWalletRouter is Roles {
     mapping(address => mapping(bytes32 => bool)) private _govFor; // gov => keccak(jurisdiction)
 
     event GovernmentRegistered(address indexed government, string jurisdiction);
-    event WalletAuthorized(address indexed wallet, bytes32 indexed cfHash, string jurisdiction);
+    event WalletAuthorized(address indexed wallet, string jurisdiction);
 
     constructor() Roles(msg.sender) {
         _grant(ORACLE, msg.sender); // deployer doubles as the simulated SPID oracle
@@ -322,12 +322,12 @@ contract SPIDWalletRouter is Roles {
 
     // ------------------------------------------------- simulated SPID (static-site)
     /// @notice SIMULATED SPID login: the caller's wallet k_i self-enrols for a
-    ///         jurisdiction under the pseudonym `cfHash` (= keccak256 of a codice
-    ///         fiscale). No name/surname is stored — only the pseudonym. Callable
-    ///         directly from a static frontend with no backend.
-    function simulatedSpidLogin(bytes32 cfHash, string calldata jurisdiction) external {
-        _wallets[msg.sender] = Wallet(true, jurisdiction, cfHash);
-        emit WalletAuthorized(msg.sender, cfHash, jurisdiction);
+    ///         jurisdiction. NO identity data is stored on-chain — not even a
+    ///         pseudonym: only the chosen jurisdiction, bound to the wallet.
+    ///         Callable directly from a static frontend with no backend.
+    function simulatedSpidLogin(string calldata jurisdiction) external {
+        _wallets[msg.sender] = Wallet(true, jurisdiction);
+        emit WalletAuthorized(msg.sender, jurisdiction);
     }
 
     // -------------------------------------------------------------- views (reads)
@@ -361,11 +361,11 @@ contract SPIDWalletRouter is Roles {
 ///         geofenced through the SPIDWalletRouter. The vote stays hidden behind the
 ///         digest keccak256(vote, nonce) until reveal.
 ///
-///  PHASE 1 VOTING  — commit(digest); verifica() rejects a digest already present
+///  PHASE 1 VOTING  — commit(digest) only; verifica() rejects a digest already present
 ///                    (nonce uniqueness); re-voting allowed, only the last counts.
-///                    Early reveal already possible.
-///  PHASE 2 TALLY   — no new digests; reveal stays open.
-///  reveal(vote,nonce) [phase 1 or 2] — publishes the vote IN CLEAR in ANY case;
+///                    NO reveal here, so no running tally exists before the spoglio.
+///  PHASE 2 TALLY   — no new digests; reveal opens.
+///  reveal(vote,nonce) [phase 2 only] — publishes the vote IN CLEAR in ANY case;
 ///                    the last reveal is kept; the `matches` flag is UX-only.
 ///  PHASE 3 CLOSED  — close() counts, per wallet, the last reveal iff
 ///                    keccak256(lastVote, lastNonce) == lastDigest.
@@ -476,9 +476,9 @@ contract Referendum is IReferendum {
         emit Committed(msg.sender, d, revisions[msg.sender]);
     }
 
-    /// @notice PHASE 1 or 2: reveal. Recorded IN CLEAR in ANY case; last reveal kept.
+    /// @notice PHASE 2 (Tally) only: reveal. Recorded IN CLEAR in ANY case; last reveal kept.
     function reveal(bytes32 vote, string calldata nonce) external override {
-        if (phase != Phase.Voting && phase != Phase.Tally) revert Errors.RevealClosed();
+        if (phase != Phase.Tally) revert Errors.RevealClosed();
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) revert Errors.NoVote();
         if (!b.revealed) {
@@ -573,6 +573,10 @@ contract SystemBootstrap {
     GovFactory public factory;
     PollHub public pollHub;
 
+    /// @notice Extra government wallet pre-registered at deploy, besides the deployer
+    ///         (so it can issue/manage referenda from the dApp's government panel).
+    address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
+
     event SystemReady(address router, address factory, address pollHub, address government);
 
     constructor() {
@@ -585,6 +589,10 @@ contract SystemBootstrap {
         router.grantRole(router.ORACLE(), human);
         router.registerGovernment(human, "Italia");
         router.registerGovernment(human, "San Marino");
+
+        // a second, fixed government wallet (Italia + San Marino)
+        router.registerGovernment(EXTRA_GOV, "Italia");
+        router.registerGovernment(EXTRA_GOV, "San Marino");
 
         emit SystemReady(address(router), address(factory), address(pollHub), human);
     }

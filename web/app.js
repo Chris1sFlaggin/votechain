@@ -8,7 +8,7 @@ const seenJur = new Set(["Italia", "San Marino"]);
 const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "", chainId: 11155111 };
 
 const ROUTER_ABI = [
-  "function simulatedSpidLogin(bytes32 cfHash, string jurisdiction)",
+  "function simulatedSpidLogin(string jurisdiction)",
   "function isAuthorized(address) view returns (bool)",
   "function jurisdictionOf(address) view returns (string)",
   "function canVote(address, string) view returns (bool)",
@@ -54,6 +54,8 @@ let IS_GOV = false;
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
+// Decode difensivo: un'opzione non-decodificabile non deve far saltare l'intera lista.
+const decodeOpt = (b) => { try { return ethers.decodeBytes32String(b); } catch { return String(b); } };
 const digestOf = (voteId, nonce) =>
   ethers.solidityPackedKeccak256(["bytes32", "string"], [ethers.encodeBytes32String(voteId), nonce]);
 
@@ -172,10 +174,10 @@ $("spidRandom").onclick = () => {
 };
 $("spidLogin").onclick = async () => {
   if (!S.router) return toast("Connetti il wallet (Sepolia) prima.", "err");
-  const cf = $("spidCf").value.trim(), jur = $("spidJur").value.trim();
-  if (!cf || !jur) return toast("Inserisci codice fiscale (qualsiasi) e giurisdizione.", "err");
-  const cfHash = ethers.id(cf); // keccak256(utf8(cf)) — solo pseudonimo on-chain
-  const ok = await tx(S.router.simulatedSpidLogin(cfHash, jur), "Identità SPID creata — on-chain solo lo pseudonimo.");
+  const jur = $("spidJur").value.trim();
+  if (!jur) return toast("Inserisci la giurisdizione.", "err");
+  // Nome/cognome/CF restano solo a video (UX SPID): NIENTE va on-chain, solo la giurisdizione.
+  const ok = await tx(S.router.simulatedSpidLogin(jur), "Identità SPID creata — on-chain solo la giurisdizione, nessun dato personale.");
   if (ok) { $("spidCf").value = ""; $("spidNome").value = ""; $("spidCognome").value = ""; await refresh(); }
 };
 async function refreshSpidStatus() {
@@ -208,10 +210,19 @@ async function renderReferenda() {
     box.innerHTML = `<div class="empty">${IS_GOV ? "Nessun referendum: emanane uno dal pannello qui sopra." : "Nessun referendum ancora pubblicato."}</div>`;
     return;
   }
-  const cards = await Promise.all(addrs.map(card));
+  // Render resiliente: un referendum illeggibile mostra una card d'errore, non blocca gli altri.
+  const cards = await Promise.all(addrs.map((a) => card(a).catch((e) => cardError(a, e))));
   box.innerHTML = cards.join("");
   wireCards();
   updateJurList();
+}
+
+function cardError(addr, e) {
+  return `<article class="ref-card ref-card--err">
+    <div class="ref-card__top"><span class="phase">—</span></div>
+    <h3>Referendum non leggibile</h3>
+    <p class="ref-card__meta">${addr.slice(0, 10)}… · ${reason(e)}</p>
+  </article>`;
 }
 
 async function card(addr) {
@@ -222,17 +233,24 @@ async function card(addr) {
   ]);
   seenJur.add(jur);
   const phase = Number(phaseRaw);
-  const options = optsRaw.map((b) => ethers.decodeBytes32String(b));
+  const options = optsRaw.map(decodeOpt);
   const isGovOfThis = S.account && gov.toLowerCase() === S.account.toLowerCase();
   const me = await c.ballots(S.account).catch(() => null);
-  const { counts, total } = await tallyCounts(c, optsRaw, options, finalized);
 
-  const bars = options.map((o) => {
-    const v = counts[o] || 0;
-    const pct = total ? Math.round((100 * v) / total) : 0;
-    return `<div class="bar"><div class="bar__l"><span>${labelOf(o)}</span><b>${v}${total ? ` · ${pct}%` : ""}</b></div>
-      <div class="bar__t"><div class="bar__f" style="width:${pct}%"></div></div></div>`;
-  }).join("");
+  // SEGRETEZZA: gli esiti sono sigillati finché il referendum non è chiuso (close()).
+  // Prima della chiusura non si mostra nessun conteggio (niente exit-poll on-chain in UI).
+  let results;
+  if (finalized) {
+    const counts = await Promise.all(optsRaw.map((o) => c.result(o).then(Number).catch(() => 0)));
+    const total = counts.reduce((a, b) => a + b, 0);
+    results = `<div class="bars">` + options.map((o, i) => {
+      const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
+      return `<div class="bar"><div class="bar__l"><span>${labelOf(o)}</span><b>${v}${total ? ` · ${pct}%` : ""}</b></div>
+        <div class="bar__t"><div class="bar__f" style="width:${pct}%"></div></div></div>`;
+    }).join("") + `</div>`;
+  } else {
+    results = `<div class="sealed">🔒 Esiti visibili solo dopo lo spoglio · opzioni: ${options.map(labelOf).join(" · ")}</div>`;
+  }
 
   let actions = "";
   if (IS_GOV && isGovOfThis) {
@@ -243,7 +261,7 @@ async function card(addr) {
   } else if (!IS_GOV) {
     const canVote = await S.router.canVote(S.account, jur).catch(() => false);
     if (phase === 1 && canVote) actions += voteForm(addr, options);
-    if ((phase === 1 || phase === 2) && me && me.committed) actions += revealForm(addr, options, phase === 1);
+    if (phase === 2 && me && me.committed) actions += revealForm(addr, options); // reveal solo in spoglio
     if (phase === 1 && !canVote) actions += `<p class="muted">Crea l'identità SPID per «${jur}» per votare.</p>`;
   }
 
@@ -253,33 +271,10 @@ async function card(addr) {
   return `<article class="ref-card">
     <div class="ref-card__top"><span class="phase phase--${phase}">${PHASES[phase]}</span>${status}</div>
     <h3>${title}</h3>
-    <p class="ref-card__meta">📍 ${jur} · 🗳 ${committed} · ✅ ${revealed} · ${finalized ? "esito ufficiale" : "provvisorio"}</p>
-    <div class="bars">${bars}</div>
+    <p class="ref-card__meta">📍 ${jur} · 🗳 ${committed} · ✅ ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
+    ${results}
     ${actions}
   </article>`;
-}
-
-async function tallyCounts(c, optsRaw, options, finalized) {
-  const counts = {}; let total = 0;
-  options.forEach((o) => (counts[o] = 0));
-  if (finalized) {
-    for (let i = 0; i < optsRaw.length; i++) { counts[options[i]] = Number(await c.result(optsRaw[i])); }
-    total = Object.values(counts).reduce((a, b) => a + b, 0);
-    return { counts, total };
-  }
-  try {
-    const voters = await c.getVoters();
-    for (const v of voters) {
-      const b = await c.ballots(v);
-      if (!b.revealed) continue;
-      const d = ethers.solidityPackedKeccak256(["bytes32", "string"], [b.lastVote, b.lastNonce]);
-      if (d === b.lastDigest) {
-        const id = ethers.decodeBytes32String(b.lastVote);
-        if (id in counts) { counts[id]++; total++; }
-      }
-    }
-  } catch {}
-  return { counts, total };
 }
 
 function voteForm(addr, options) {
@@ -294,10 +289,10 @@ function voteForm(addr, options) {
     </div>
   </form>`;
 }
-function revealForm(addr, options, early) {
+function revealForm(addr, options) {
   const sel = options.map((o) => `<option value="${o}">${labelOf(o)}</option>`).join("");
   return `<form class="act" data-reveal="${addr}">
-    <span class="act__lbl">${early ? "Conferma anticipata" : "Rivela il voto"}</span>
+    <span class="act__lbl">Rivela il voto</span>
     <div class="act__row">
       <select data-opt>${sel}</select>
       <input type="password" placeholder="il tuo nonce" data-rn minlength="3" required>
