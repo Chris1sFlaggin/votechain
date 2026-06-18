@@ -212,9 +212,16 @@ body[data-screen="social"] .empty,body[data-screen="social"] .muted{color:#9aa3b
 .deck{max-width:520px;margin:0 auto;padding:.5rem 0 5rem}
 .deck-hint{color:#9aa3b8;font-size:.85rem;text-align:center;margin:.2rem 0 1.1rem}
 .deck-stack{position:relative;min-height:280px;display:flex;justify-content:center;align-items:flex-start}
-.deck-card{width:100%;background:#101015;border:1px solid #23232e;border-radius:20px;padding:1.2rem 1.3rem;
-  box-shadow:0 16px 40px rgba(0,0,0,.55);cursor:grab;touch-action:pan-y;user-select:none}
+.deck-card{position:relative;overflow:hidden;width:100%;background:#101015;border:1px solid #23232e;border-radius:20px;
+  padding:1.2rem 1.3rem;box-shadow:0 16px 40px rgba(0,0,0,.55);cursor:grab;touch-action:pan-y;user-select:none}
 .deck-card:active{cursor:grabbing}
+/* overlay feedback swipe (stile Tinder): verde a destra = approva, rosso a sinistra = disapprova */
+.deck-ov{position:absolute;inset:0;display:flex;align-items:center;opacity:0;pointer-events:none;border-radius:20px;
+  font-weight:900;font-size:1.5rem;letter-spacing:2px}
+.deck-ov--yes{justify-content:flex-end;padding-right:1.4rem;color:#7cf3ad;
+  background:linear-gradient(90deg,transparent 40%,rgba(22,179,100,.6))}
+.deck-ov--no{justify-content:flex-start;padding-left:1.4rem;color:#ff97ad;
+  background:linear-gradient(90deg,rgba(255,45,85,.6),transparent 60%)}
 .deck-card .poll__q{color:#fff}
 .deck-card .poll__head{color:#8a8f9e}
 .deck-card .poll__stake{background:#2a0010;color:#ff5c7a}

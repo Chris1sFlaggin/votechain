@@ -606,6 +606,8 @@ function govPollCard(item) {
   }).join("");
   const badge = p.won ? `<span class="won">VINTO</span>` : `<span class="prog-pill">${total} voti</span>`;
   return `<article class="deck-card">
+    <div class="deck-ov deck-ov--yes"><span>APPROVA</span></div>
+    <div class="deck-ov deck-ov--no"><span>DISAPPROVA</span></div>
     <div class="poll__head">${avatar(p.creator)}<span class="addr">${p.creator.slice(0, 6)}…${p.creator.slice(-4)}</span>
       <span class="poll__stake">cauzione ${ethers.formatEther(p.stake)}Ξ</span>${badge}</div>
     <h3 class="poll__q">${escapeHtml(p.question)}</h3>
@@ -646,19 +648,29 @@ function moveDeck(dir) {
 function attachSwipe(card) {
   if (!card) return;
   let x0 = null, dx = 0;
+  const yes = card.querySelector(".deck-ov--yes");
+  const no = card.querySelector(".deck-ov--no");
   card.onpointerdown = (e) => { x0 = e.clientX; dx = 0; card.style.transition = "none"; card.setPointerCapture(e.pointerId); };
   card.onpointermove = (e) => {
     if (x0 == null) return;
     dx = e.clientX - x0;
     card.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
-    card.style.opacity = String(1 - Math.min(Math.abs(dx) / 420, 0.55));
+    // overlay stile Tinder: verde a destra (approva), rosso a sinistra (disapprova)
+    const t = Math.min(Math.abs(dx) / 130, 1);
+    if (yes) yes.style.opacity = dx > 0 ? t : 0;
+    if (no) no.style.opacity = dx < 0 ? t : 0;
   };
   card.onpointerup = async () => {
     if (x0 == null) return;
     const commit = Math.abs(dx) > 90;
     const approve = dx > 0; // destra = approva, sinistra = disapprova
     card.style.transition = "transform .25s, opacity .25s";
-    if (!commit) { card.style.transform = ""; card.style.opacity = "1"; x0 = null; dx = 0; return; }
+    if (!commit) {
+      card.style.transform = ""; card.style.opacity = "1";
+      if (yes) yes.style.opacity = 0;
+      if (no) no.style.opacity = 0;
+      x0 = null; dx = 0; return;
+    }
     card.style.transform = `translateX(${approve ? 680 : -680}px) rotate(${approve ? 22 : -22}deg)`;
     card.style.opacity = "0";
     x0 = null; dx = 0;
