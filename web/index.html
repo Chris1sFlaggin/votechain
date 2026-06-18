@@ -6,22 +6,38 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
-<body>
+<body data-screen="access">
+
+  <!-- ============================================================ ACCESSO -->
+  <div id="accessScreen" class="access">
+    <div class="access__brand"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
+    <p class="access__sub">Voto su blockchain · scegli come entrare</p>
+    <div class="access__btns">
+      <button class="access-btn access-btn--ist" data-go="political">
+        <span class="access-btn__ico">🏛</span><span>Istituzionale</span>
+        <small>Referendum & voto on-chain</small>
+      </button>
+      <button class="access-btn access-btn--soc" data-go="social">
+        <span class="access-btn__ico">💬</span><span>Social</span>
+        <small>Sondaggi della community</small>
+      </button>
+      <button class="access-btn access-btn--chain" data-go="chain">
+        <span class="access-btn__ico">🔗</span><span>Blockchain</span>
+        <small>Esplora le transazioni live</small>
+      </button>
+    </div>
+  </div>
+
   <header class="nav">
-    <div class="brand"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
+    <div class="brand" title="Cambia sezione"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
     <div class="nav__right">
       <span id="identity" class="identity hidden"></span>
       <button id="connect" class="btn btn--primary">Connetti wallet</button>
     </div>
   </header>
-
-  <div class="tabs">
-    <button id="tabPolitical" class="tab is-active">🏛 Istituzionale</button>
-    <button id="tabSocial" class="tab">💬 Sondaggi social</button>
-  </div>
 
   <div id="toast" class="toast hidden"></div>
 
@@ -72,31 +88,28 @@
         <div id="referenda" class="ref-grid"></div>
       </section>
 
-      <section id="chainExplorer" class="hidden chain-explorer">
+    </div>
+
+    <!-- ============================================================ BLOCKCHAIN -->
+    <div id="chainView">
+      <section id="chainExplorer" class="chain-explorer">
         <div class="chain-explorer__head">
           <h2 class="section-title">🔗 Esplora la blockchain <small>in tempo reale</small></h2>
           <span class="chain-live"><span class="chain-live__dot"></span><span id="chainHead">in ascolto della rete…</span></span>
         </div>
         <p class="muted">Ogni azione (identità, voto, spoglio, sondaggio) è una <b>transazione</b> registrata per sempre su Sepolia. Passa il mouse — o tocca — su un evento per capire <b>cosa significa</b> e <b>quali dati restano davvero on-chain</b>.</p>
+        <p id="chainConnect" class="muted hidden">Connetti il wallet (Sepolia) per metterti in ascolto della rete.
+          <button id="connectChain" class="btn btn--primary btn--sm">Connetti wallet</button></p>
         <div id="chainFeed" class="chain-feed"></div>
       </section>
     </div>
 
     <!-- ============================================================ SOCIAL -->
-    <div id="socialView" class="social hidden">
+    <div id="socialView" class="social">
       <section class="social-hero">
-        <h1>💬 Sondaggi della community</h1>
-        <p>Chiunque crea un sondaggio mettendo una piccola <b>cauzione</b> e chiunque vota (una volta). Quando il risultato diventa <b>statisticamente significativo</b> il sondaggio <b>vince</b> e il creatore <b>riprende la cauzione</b> 💸. Niente SPID: aperto a tutti.</p>
+        <h1>🔥 La community vota</h1>
+        <p>Sondaggi aperti a tutti: metti una piccola <b>cauzione</b>, la riprendi se il tuo sondaggio diventa <b>significativo</b> 💸. Niente SPID. Tocca <b>➕</b> in basso per crearne uno.</p>
         <button id="connectSocial" class="btn btn--social btn--xl">Connetti wallet</button>
-      </section>
-
-      <section class="card social-create" id="createCard">
-        <h2>✨ Crea un sondaggio</h2>
-        <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza 🍕 o Pasta 🍝?" autocomplete="off"></label>
-        <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
-        <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
-        <button id="createPoll" class="btn btn--social btn--xl">🚀 Pubblica sondaggio</button>
-        <p class="note">Niente soglia da impostare: il sondaggio <b>vince</b> quando il risultato è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione 💸, altrimenti resta bloccata (anti-spam).</p>
       </section>
 
       <div id="pollFeed" class="poll-feed"></div>
@@ -108,7 +121,27 @@
     <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
-  <script src="config.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <!-- bottom nav social (stile app) -->
+  <nav id="socialNav" class="snav-bar">
+    <button class="snav is-active" data-snav="feed"><i>🏠</i>Feed</button>
+    <button class="snav snav--create" data-snav="create"><i>➕</i>Crea</button>
+    <button class="snav" data-snav="switch"><i>⛓</i>Sezioni</button>
+  </nav>
+
+  <!-- bottom-sheet creazione sondaggio -->
+  <div id="pollSheet" class="poll-sheet">
+    <div class="poll-sheet__panel">
+      <div class="poll-sheet__grab"></div>
+      <h2>✨ Crea un sondaggio</h2>
+      <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza 🍕 o Pasta 🍝?" autocomplete="off"></label>
+      <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
+      <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
+      <button id="createPoll" class="btn btn--social btn--xl">🚀 Pubblica sondaggio</button>
+      <p class="note">Il sondaggio <b>vince</b> quando è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione 💸, altrimenti resta bloccata (anti-spam).</p>
+    </div>
+  </div>
+
+  <script src="config.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

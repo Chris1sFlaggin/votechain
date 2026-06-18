@@ -119,12 +119,94 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .opt:has(input:checked){border-color:var(--blue);background:#eaf1ff;box-shadow:0 0 0 2px rgba(47,109,246,.12)}
 .opt input{width:auto;margin:0}
 
-/* ===== tabs ===== */
-.tabs{display:flex;gap:.4rem;justify-content:center;margin:1rem auto 0;max-width:1040px;padding:0 1.4rem}
-.tab{cursor:pointer;border:1px solid var(--line);background:#fff;color:#445;font-weight:700;
-  padding:.55rem 1.1rem;border-radius:999px;font-size:.95rem;transition:.15s}
-.tab:hover{transform:translateY(-1px)}
-.tab.is-active{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;border-color:transparent;box-shadow:0 6px 18px rgba(124,58,237,.3)}
+/* ===== schermate (access / political / social / chain) ===== */
+#accessScreen{display:none}
+body[data-screen="access"] #accessScreen{display:flex}
+body[data-screen="access"] .nav,
+body[data-screen="access"] main,
+body[data-screen="access"] .foot,
+body[data-screen="access"] #socialNav{display:none}
+/* in ogni schermata mostro solo la sua view */
+body[data-screen="political"] #socialView,
+body[data-screen="political"] #chainView,
+body[data-screen="social"] #politicalView,
+body[data-screen="social"] #chainView,
+body[data-screen="chain"] #politicalView,
+body[data-screen="chain"] #socialView{display:none}
+#socialNav{display:none}
+body[data-screen="social"] #socialNav{display:flex}
+body[data-screen="social"] .foot{display:none}
+
+/* ===== schermata di accesso (nera, due/tre bottoni) ===== */
+.access{position:fixed;inset:0;z-index:80;flex-direction:column;align-items:center;justify-content:center;gap:1.6rem;
+  padding:2rem;text-align:center;color:#fff;
+  background:radial-gradient(900px 500px at 50% -10%,#16223e 0,transparent 60%),#050507}
+.access__brand{font-size:2.8rem;font-weight:900;letter-spacing:.4px;display:flex;align-items:center;gap:.6rem}
+.access__brand strong{color:var(--blue2)}
+.access__sub{color:#9aa3b8;margin:0 0 .4rem;font-size:1rem}
+.access__btns{display:flex;gap:1.2rem;flex-wrap:wrap;justify-content:center}
+.access-btn{width:220px;min-height:190px;border-radius:24px;border:1px solid #20232e;background:#0d0f15;color:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;cursor:pointer;
+  font-size:1.35rem;font-weight:800;transition:.18s}
+.access-btn small{font-size:.8rem;font-weight:500;color:#8a8f9e;max-width:80%}
+.access-btn__ico{font-size:2.6rem;line-height:1}
+.access-btn:hover{transform:translateY(-4px)}
+.access-btn--ist:hover{border-color:var(--blue);box-shadow:0 20px 50px rgba(47,109,246,.32)}
+.access-btn--soc:hover{border-color:#ff2d55;box-shadow:0 20px 50px rgba(255,45,85,.32)}
+.access-btn--chain:hover{border-color:#16b364;box-shadow:0 20px 50px rgba(22,179,100,.32)}
+@media(max-width:520px){.access-btn{width:100%;min-height:120px;flex-direction:row;justify-content:flex-start;gap:1rem;padding:0 1.4rem}
+  .access-btn small{display:block}.access-btn__ico{font-size:2rem}}
+
+/* ===== blockchain view ===== */
+#chainView{padding-top:.5rem}
+
+/* ===== SOCIAL — skin scura stile app ===== */
+body[data-screen="social"]{background:#050507;color:#fff}
+body[data-screen="social"] .nav{background:linear-gradient(90deg,#15010a,#2a0010);box-shadow:0 2px 18px rgba(0,0,0,.5)}
+body[data-screen="social"] .brand strong{color:#ff5c7a}
+body[data-screen="social"] .social{padding-bottom:6rem}
+body[data-screen="social"] .social-hero{background:linear-gradient(135deg,#2a0010,#7a0023 70%,#ff2d55);
+  box-shadow:0 18px 44px rgba(255,45,85,.22)}
+body[data-screen="social"] .btn--social{background:linear-gradient(135deg,#ff2d55,#c70036);color:#fff}
+body[data-screen="social"] .poll{background:#101015;border-color:#23232e;color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+body[data-screen="social"] .poll:hover{box-shadow:0 16px 36px rgba(255,45,85,.18)}
+body[data-screen="social"] .poll__q{color:#fff}
+body[data-screen="social"] .poll__head{color:#8a8f9e}
+body[data-screen="social"] .poll__stake{background:#2a0010;color:#ff5c7a}
+body[data-screen="social"] .poll-opt{background:#181820;border-color:#2a2a36;color:#fff}
+body[data-screen="social"] .poll-opt:not([disabled]):hover{border-color:#ff2d55}
+body[data-screen="social"] .poll-opt__l i{color:#9aa}
+body[data-screen="social"] .poll-opt__bar span{background:linear-gradient(90deg,#3a0014,#ff2d55)}
+body[data-screen="social"] .poll__progbar{background:#23232e}
+body[data-screen="social"] .poll__progbar div{background:linear-gradient(90deg,#ff2d55,#ff7a98)}
+body[data-screen="social"] .prog-pill{background:#1c1c24;color:#b9b9c6}
+body[data-screen="social"] .pill{background:#23232e;color:#c9c9d4}
+body[data-screen="social"] .pill--ok{background:#10301f;color:#4ade80}
+body[data-screen="social"] .empty,body[data-screen="social"] .muted{color:#9aa3b8}
+
+/* bottom nav social */
+.snav-bar{position:fixed;left:0;right:0;bottom:0;z-index:50;justify-content:space-around;align-items:center;
+  background:#0a0a0f;border-top:1px solid #1d1d27;padding:.45rem .4rem calc(.45rem + env(safe-area-inset-bottom))}
+.snav{background:none;border:none;color:#7a7f8e;display:flex;flex-direction:column;align-items:center;gap:.12rem;
+  font-size:.7rem;font-weight:700;cursor:pointer;padding:.3rem 1rem;transition:.15s}
+.snav i{font-size:1.35rem;font-style:normal;line-height:1}
+.snav.is-active,.snav:hover{color:#ff2d55}
+.snav--create i{background:linear-gradient(135deg,#ff2d55,#c70036);color:#fff;width:2.4rem;height:2.4rem;border-radius:50%;
+  display:grid;place-items:center;margin-top:-1rem;box-shadow:0 8px 20px rgba(255,45,85,.45)}
+.snav--create{color:#ff5c7a}
+
+/* bottom-sheet creazione sondaggio */
+.poll-sheet{position:fixed;inset:0;z-index:55;display:none;align-items:flex-end;background:rgba(0,0,0,.65);backdrop-filter:blur(2px)}
+.poll-sheet.open{display:flex;animation:fade .2s ease}
+.poll-sheet__panel{width:100%;max-width:560px;margin:0 auto;background:#101015;color:#fff;border:1px solid #23232e;
+  border-radius:22px 22px 0 0;padding:1.1rem 1.3rem 5.5rem;max-height:86vh;overflow:auto;animation:slideup .26s ease}
+.poll-sheet__grab{width:42px;height:5px;border-radius:999px;background:#33333f;margin:.1rem auto .8rem}
+.poll-sheet__panel h2{color:#ff5c7a;margin:.1rem 0 .6rem}
+.poll-sheet__panel input,.poll-sheet__panel textarea{background:#181820;border-color:#2a2a36;color:#fff}
+.poll-sheet__panel input:focus,.poll-sheet__panel textarea:focus{border-color:#ff2d55;box-shadow:0 0 0 3px rgba(255,45,85,.18);background:#1d1d26}
+.poll-sheet__panel .field span,.poll-sheet__panel .note{color:#9aa3b8}
+@keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
 
 /* ===== social theme ===== */
 .btn--social{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;border:none}

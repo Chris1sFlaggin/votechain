@@ -109,11 +109,13 @@ async function connect() {
   if (!okAddr || !initContracts()) { toast("Sistema non configurato per questa rete (config.js).", "err"); return; }
   await refresh();
   startExplorer().catch(() => {}); // esplora-chain live (non blocca il resto)
-  if (!$("socialView").classList.contains("hidden")) await renderPolls();
+  renderChainGate();
+  if (document.body.dataset.screen === "social") await renderPolls();
 }
 $("connect").onclick = connect;
 $("connectHero").onclick = connect;
 $("connectSocial").onclick = connect;
+$("connectChain").onclick = connect;
 
 async function resolveAddresses() {
   // dal bootstrap (ritorna router, factory, pollHub)
@@ -162,7 +164,6 @@ function renderIdentity() {
 function gateAreas() {
   $("landing").classList.add("hidden");
   $("voteSection").classList.remove("hidden");
-  $("chainExplorer").classList.remove("hidden");
   if (IS_GOV) {
     $("govArea").classList.remove("hidden");
     $("citizenArea").classList.add("hidden");
@@ -526,16 +527,36 @@ function renderExplorer() {
 
 // =================================================================== SOCIAL
 
-function showView(which) {
-  const social = which === "social";
-  $("socialView").classList.toggle("hidden", !social);
-  $("politicalView").classList.toggle("hidden", social);
-  $("tabSocial").classList.toggle("is-active", social);
-  $("tabPolitical").classList.toggle("is-active", !social);
-  if (social) renderPolls();
+// Navigazione a schermate: "access" (scelta), "political" (istituzionale), "social".
+function showScreen(which) {
+  document.body.dataset.screen = which;
+  closeSheet();
+  window.scrollTo({ top: 0 });
+  if (which === "social" && S.pollHub) renderPolls();
+  if (which === "chain") { renderChainGate(); if (S.provider) startExplorer().catch(() => {}); }
 }
-$("tabPolitical").onclick = () => showView("political");
-$("tabSocial").onclick = () => showView("social");
+function renderChainGate() {
+  $("chainConnect").classList.toggle("hidden", !!(S.signer && S.factory));
+}
+document.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => showScreen(b.dataset.go)));
+// il logo in alto riporta alla scelta della sezione
+document.querySelector(".nav .brand").onclick = () => showScreen("access");
+
+// ---- bottom sheet "crea sondaggio" (stile app social) ----
+function openSheet() { $("pollSheet").classList.add("open"); }
+function closeSheet() { $("pollSheet")?.classList.remove("open"); }
+$("pollSheet").onclick = (e) => { if (e.target.id === "pollSheet") closeSheet(); };
+
+// ---- bottom nav social ----
+document.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = () => {
+  const a = b.dataset.snav;
+  document.querySelectorAll(".snav").forEach((s) => s.classList.toggle("is-active", s === b && a !== "create"));
+  if (a === "feed") { renderPolls(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  else if (a === "create") {
+    if (!S.pollHub) return toast("Connetti il wallet su Sepolia per creare un sondaggio.", "err");
+    openSheet();
+  } else if (a === "switch") showScreen("access");
+}));
 
 $("createPoll").onclick = async () => {
   if (!S.pollHub) return toast("Connetti il wallet su Sepolia (se manca, il gestore deve ridepoloyare con PollHub).", "err");
@@ -548,7 +569,7 @@ $("createPoll").onclick = async () => {
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
   const b32 = opts.map((o) => ethers.encodeBytes32String(o));
   const ok = await tx(S.pollHub.createPoll(q, b32, { value }), "Sondaggio pubblicato! 🎉");
-  if (ok) { $("pollQ").value = ""; $("pollOpts").value = ""; await renderPolls(); }
+  if (ok) { $("pollQ").value = ""; $("pollOpts").value = ""; closeSheet(); await renderPolls(); }
 };
 
 async function renderPolls() {
