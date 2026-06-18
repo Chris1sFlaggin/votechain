@@ -6,33 +6,33 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=21" />
+  <link rel="stylesheet" href="style.css?v=22" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body data-screen="access">
 
   <!-- ============================================================ ACCESSO -->
   <div id="accessScreen" class="access">
-    <div class="access__brand"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
+    <div class="access__brand">Vote<strong>Chain</strong></div>
     <p class="access__sub">Voto su blockchain · scegli come entrare</p>
     <div class="access__btns">
       <button class="access-btn access-btn--ist" data-go="political">
-        <span class="access-btn__ico">🏛</span><span>Istituzionale</span>
+        <span>Istituzionale</span>
         <small>Referendum & voto on-chain</small>
       </button>
       <button class="access-btn access-btn--soc" data-go="social">
-        <span class="access-btn__ico">💬</span><span>Social</span>
+        <span>Social</span>
         <small>Sondaggi della community</small>
       </button>
       <button class="access-btn access-btn--chain" data-go="chain">
-        <span class="access-btn__ico">🔗</span><span>Blockchain</span>
+        <span>Blockchain</span>
         <small>Esplora le transazioni live</small>
       </button>
     </div>
   </div>
 
   <header class="nav">
-    <div class="brand" title="Cambia sezione"><span class="brand__mark" aria-hidden="true">⛓</span> Vote<strong>Chain</strong></div>
+    <div class="brand" title="Cambia sezione">Vote<strong>Chain</strong></div>
     <div class="nav__right">
       <span id="identity" class="identity hidden"></span>
       <button id="connect" class="btn btn--primary">Connetti wallet</button>
@@ -60,7 +60,7 @@
 
       <section id="govArea" class="hidden">
         <div class="role-banner role-banner--gov">
-          <div><b>🏛 Pannello Governo</b><span>Sei l'autorità per: <b id="govJurs"></b>. Emani i referendum; i cittadini votano dal proprio account (il governo non vota).</span></div>
+          <div><b>Pannello Governo</b><span>Sei l'autorità per: <b id="govJurs"></b>. Emani i referendum; i cittadini votano dal proprio account (il governo non vota).</span></div>
         </div>
         <section class="card">
           <h2>Emana un referendum</h2>
@@ -69,17 +69,17 @@
             <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
           </div>
           <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
-          <button id="createRef" class="btn btn--gov btn--xl">📜 Emana referendum</button>
+          <button id="createRef" class="btn btn--gov btn--xl">Emana referendum</button>
         </section>
       </section>
 
       <section id="citizenArea" class="hidden">
         <div class="role-banner role-banner--cit">
-          <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Per votare crea un'identità SPID dedicata dal riquadro di ciascun referendum qui sotto.</span></div>
+          <div><b>Cittadino</b><span id="spidStatus">Per votare crea un'identità SPID dedicata dal riquadro di ciascun referendum qui sotto.</span></div>
         </div>
         <section class="card" id="spidCard">
-          <h2>🔐 Identità SPID <small>(simulata)</small></h2>
-          <p class="muted">Per <b>ogni</b> referendum firmi con SPID (simulato) una <b>identità dedicata</b>: vale solo per quel referendum e resta accessibile <b>fino alla chiusura</b>. La stessa identità <b>non</b> permette di votare altri referendum, e <b>senza identità non si può votare</b>. On-chain finisce <b>solo la giurisdizione</b> — nessun dato personale, nemmeno uno pseudonimo. Crea l'identità dal riquadro del referendum che vuoi votare 👇</p>
+          <h2>Identità SPID <small>(simulata)</small></h2>
+          <p class="muted">Per <b>ogni</b> referendum firmi con SPID (simulato) una <b>identità dedicata</b>: vale solo per quel referendum e resta accessibile <b>fino alla chiusura</b>. La stessa identità <b>non</b> permette di votare altri referendum, e <b>senza identità non si può votare</b>. On-chain finisce <b>solo la giurisdizione</b> — nessun dato personale, nemmeno uno pseudonimo. Crea l'identità dal riquadro del referendum che vuoi votare </p>
         </section>
       </section>
 
@@ -94,7 +94,7 @@
     <div id="chainView">
       <section id="chainExplorer" class="chain-explorer">
         <div class="chain-explorer__head">
-          <h2 class="section-title">🔗 Esplora la blockchain <small>in tempo reale</small></h2>
+          <h2 class="section-title">Esplora la blockchain <small>in tempo reale</small></h2>
           <span class="chain-live"><span class="chain-live__dot"></span><span id="chainHead">in ascolto della rete…</span></span>
         </div>
         <p class="muted">Ogni azione (identità, voto, spoglio, sondaggio) è una <b>transazione</b> registrata per sempre su Sepolia. Passa il mouse — o tocca — su un evento per capire <b>cosa significa</b> e <b>quali dati restano davvero on-chain</b>.</p>
@@ -142,7 +142,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="config.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

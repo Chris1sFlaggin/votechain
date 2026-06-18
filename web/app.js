@@ -160,8 +160,8 @@ async function refresh() {
 
 function renderIdentity() {
   const role = IS_GOV
-    ? `<span class="role role--gov">🏛 Governo</span>`
-    : `<span class="role role--cit">🧑‍💻 Cittadino</span>`;
+    ? `<span class="role role--gov">Governo</span>`
+    : `<span class="role role--cit">Cittadino</span>`;
   $("identity").innerHTML = `${avatar(S.account)}<span class="addr">${S.account.slice(0, 6)}…${S.account.slice(-4)}</span>${role}`;
   $("identity").classList.remove("hidden");
 }
@@ -239,7 +239,7 @@ async function card(addr) {
     ? await S.router.canVote(addr, S.account, jur).catch(() => false) : false;
   let identity = "";
   if (authorized && phase !== 3) {
-    identity = `<div class="ident">🪪 Identità: <code>${pseudoId(S.account, addr)}</code> · 📍 ${jur}
+    identity = `<div class="ident">Identità: <code>${pseudoId(S.account, addr)}</code> · ${jur}
       <span class="ident__exp">valida fino alla chiusura</span></div>`;
   }
 
@@ -255,7 +255,7 @@ async function card(addr) {
         <div class="bar__t"><div class="bar__f" style="width:${pct}%"></div></div></div>`;
     }).join("") + `</div>`;
   } else {
-    results = `<div class="sealed">🔒 Esiti visibili solo dopo lo spoglio · opzioni: ${options.map((o) => labelOf(o.label)).join(" · ")}</div>`;
+    results = `<div class="sealed">Esiti visibili solo dopo lo spoglio · opzioni: ${options.map((o) => labelOf(o.label)).join(" · ")}</div>`;
   }
 
   let actions = "";
@@ -275,12 +275,12 @@ async function card(addr) {
   }
 
   const status = me && me.committed
-    ? `<span class="pill ${me.confirmed ? "pill--ok" : ""}">${me.confirmed ? "✓ confermato" : "✓ votato"}</span>` : "";
+    ? `<span class="pill ${me.confirmed ? "pill--ok" : ""}">${me.confirmed ? "confermato" : "votato"}</span>` : "";
 
   return `<article class="ref-card">
     <div class="ref-card__top"><span class="phase phase--${phase}">${PHASES[phase]}</span>${status}</div>
     <h3>${title}</h3>
-    <p class="ref-card__meta">📍 ${jur} · 🗳 ${committed} · ✅ ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
+    <p class="ref-card__meta">${jur} · commit ${committed} · reveal ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
     ${results}
     ${identity}
     ${actions}
@@ -289,7 +289,7 @@ async function card(addr) {
 
 function enrollForm(addr, jur) {
   return `<div class="act act--enroll">
-    <span class="act__lbl">🔐 Per votare crea la tua identità SPID per questo referendum</span>
+    <span class="act__lbl">Per votare crea la tua identità SPID per questo referendum</span>
     <p class="muted">Firmi con SPID (simulato) l'autorizzazione a votare «${jur}». On-chain finisce solo la giurisdizione, nessun dato personale. Vale solo per questo referendum.</p>
     <button class="btn btn--spid btn--sm" data-enroll="${addr}" data-jur="${jur}">Crea identità SPID</button>
   </div>`;
@@ -345,7 +345,7 @@ function wireCards() {
     const c = new ethers.Contract(addr, REF_ABI, S.signer);
     if (await tx(c.reveal(nonce), "Conferma inviata.")) {
       const b = await c.ballots(S.account);
-      toast(b.confirmed ? "✅ Voto confermato: scheda valida." : "⚠️ Nonce errato: nessun voto corrisponde, riprova.", b.confirmed ? "ok" : "err");
+      toast(b.confirmed ? "Voto confermato: scheda valida." : "Nonce errato: nessun voto corrisponde, riprova.", b.confirmed ? "ok" : "err");
       await refresh();
     }
   });
@@ -389,67 +389,67 @@ const shortH = (h) => (h ? `${h.slice(0, 10)}…` : "—");
 // nome evento -> come raccontarlo a un umano
 const EVT_META = {
   ReferendumCreated: {
-    ico: "📜", kind: "create", title: "Referendum emanato",
+    ico: "", kind: "create", title: "Referendum emanato",
     sum: (a) => `«${a.title}» · ${a.jurisdiction}`,
     why: "Il governo ha pubblicato un nuovo contratto-referendum: da ora esiste in modo permanente e chiunque può verificarne regole ed esiti. Nessuno può cancellarlo.",
     data: (a) => [["Contratto", shortA(a.referendum)], ["Governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction], ["Titolo", a.title]],
   },
   WalletAuthorized: {
-    ico: "🪪", kind: "id", title: "Identità SPID creata",
+    ico: "", kind: "id", title: "Identità SPID creata",
     sum: (a) => `un cittadino si è autorizzato a votare (${a.jurisdiction})`,
     why: "Un cittadino ha firmato la sua identità SPID (simulata) per UN referendum. On-chain finisce solo la giurisdizione: niente nome, niente codice fiscale, nemmeno uno pseudonimo.",
     data: (a) => [["Per il referendum", shortA(a.referendum)], ["Wallet cittadino", shortA(a.wallet)], ["Giurisdizione", a.jurisdiction]],
   },
   GovernmentRegistered: {
-    ico: "🏛", kind: "gov", title: "Governo registrato",
+    ico: "", kind: "gov", title: "Governo registrato",
     sum: (a) => `autorità abilitata per ${a.jurisdiction}`,
     why: "Un indirizzo diventa autorità elettorale per una giurisdizione: solo lui potrà emanare referendum lì. È il controllo degli accessi scritto in chiaro nella catena.",
     data: (a) => [["Wallet governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction]],
   },
   Committed: {
-    ico: "🗳️", kind: "commit", title: "Voto segreto (commit)",
+    ico: "", kind: "commit", title: "Voto segreto (commit)",
     sum: (a) => `impronta del voto depositata · revisione ${a.revision}`,
     why: "Il cuore del voto segreto: viene salvato solo keccak256(voto, nonce), un'impronta che NON rivela la scelta. Il voto è già registrato e immutabile, ma resta nascosto fino allo spoglio.",
     data: (a) => [["Elettore", shortA(a.voter)], ["Impronta (hash)", shortH(a.digest)], ["Revisione", String(a.revision)]],
   },
   Revealed: {
-    ico: "🔓", kind: "reveal", title: "Voto rivelato (spoglio)",
-    sum: (a) => `${a.matches ? labelOf(a.vote) : "nonce errato"} — ${a.matches ? "valido ✓" : "nessun voto ✗"}`,
+    ico: "", kind: "reveal", title: "Voto rivelato (spoglio)",
+    sum: (a) => `${a.matches ? labelOf(a.vote) : "nonce errato"} — ${a.matches ? "valido " : "nessun voto "}`,
     why: "Durante lo spoglio l'elettore manda solo il nonce: il contratto prova ogni opzione e trova quale combacia col digest depositato. Chiunque può verificare il conteggio. Un nonce errato non conferma nulla (ritentabile).",
     data: (a) => [["Elettore", shortA(a.voter)], ["Voto dedotto", a.matches ? labelOf(a.vote) : "—"], ["Nonce", a.nonce], ["Confermato?", a.matches ? "sì" : "no"]],
   },
   PhaseChanged: {
-    ico: "⏱️", kind: "phase", title: "Cambio fase",
+    ico: "", kind: "phase", title: "Cambio fase",
     sum: (a) => `→ ${PHASE_NAME[Number(a.phase)] ?? a.phase}`,
     why: "Il governo fa avanzare il ciclo di vita del referendum (Votazione → Spoglio → Chiuso). Ogni passaggio è una transazione tracciata: la sequenza non può essere falsificata.",
     data: (a) => [["Nuova fase", PHASE_NAME[Number(a.phase)] ?? String(a.phase)]],
   },
   Finalized: {
-    ico: "✅", kind: "final", title: "Spoglio concluso",
+    ico: "", kind: "final", title: "Spoglio concluso",
     sum: (a) => `${a.valid} voti validi · ${a.nullified} nulli`,
     why: "Il referendum è chiuso: il conteggio ufficiale è stato calcolato dal contratto stesso e non è più modificabile. Gli esiti diventano pubblici e definitivi.",
     data: (a) => [["Voti validi", String(a.valid)], ["Voti nulli", String(a.nullified)]],
   },
   PollCreated: {
-    ico: "💬", kind: "poll", title: "Sondaggio creato",
+    ico: "", kind: "poll", title: "Sondaggio creato",
     sum: (a) => `«${a.question}» · cauzione ${ethers.formatEther(a.stake)}Ξ`,
     why: "Sondaggio social aperto a tutti: il creatore blocca una piccola cauzione (anti-spam) che riprende se il sondaggio raggiunge significatività statistica. I fondi sono custoditi dal contratto, non da una persona.",
     data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Domanda", a.question], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`]],
   },
   Voted: {
-    ico: "✋", kind: "pollvote", title: "Voto sondaggio",
+    ico: "", kind: "pollvote", title: "Voto sondaggio",
     sum: (a) => `${decodeOpt(a.option)} · totale ${a.totalVotes}`,
     why: "Voto pubblico (non segreto) in un sondaggio social. Ogni indirizzo può votare una sola volta: è il contratto a impedire i doppioni, senza bisogno di un'autorità centrale.",
     data: (a) => [["Sondaggio", String(a.id)], ["Votante", shortA(a.voter)], ["Opzione", decodeOpt(a.option)], ["Voti totali", String(a.totalVotes)]],
   },
   PollWon: {
-    ico: "🏆", kind: "won", title: "Sondaggio vinto",
+    ico: "", kind: "won", title: "Sondaggio vinto",
     sum: () => "risultato statisticamente significativo",
     why: "Il distacco fra le opzioni è abbastanza ampio da essere significativo (≈95%): il sondaggio è «vinto» e la cauzione diventa riscattabile.",
     data: (a) => [["Sondaggio", String(a.id)]],
   },
   StakeClaimed: {
-    ico: "💸", kind: "claim", title: "Cauzione riscattata",
+    ico: "", kind: "claim", title: "Cauzione riscattata",
     sum: (a) => `${ethers.formatEther(a.amount)}Ξ restituiti al creatore`,
     why: "Il creatore riprende la cauzione dopo la vittoria del sondaggio: un trasferimento di ETH eseguito e tracciato dal contratto, verificabile da chiunque.",
     data: (a) => [["Sondaggio", String(a.id)], ["Creatore", shortA(a.creator)], ["Importo", `${ethers.formatEther(a.amount)} ETH`]],

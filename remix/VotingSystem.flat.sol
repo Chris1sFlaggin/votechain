@@ -664,6 +664,7 @@ contract SystemBootstrap {
     /// @notice Extra government wallet pre-registered at deploy, besides the deployer
     ///         (so it can issue/manage referenda from the dApp's government panel).
     address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
+    address public constant EXTRA_GOV2 = 0xE6bbD7Ee72Fe05B50e15416B0E03A80C43f3F861;
 
     event SystemReady(address router, address factory, address pollHub, address government);
 
@@ -678,9 +679,11 @@ contract SystemBootstrap {
         router.registerGovernment(human, "Italia");
         router.registerGovernment(human, "San Marino");
 
-        // a second, fixed government wallet (Italia + San Marino)
+        // extra fixed government wallets (Italia + San Marino)
         router.registerGovernment(EXTRA_GOV, "Italia");
         router.registerGovernment(EXTRA_GOV, "San Marino");
+        router.registerGovernment(EXTRA_GOV2, "Italia");
+        router.registerGovernment(EXTRA_GOV2, "San Marino");
 
         emit SystemReady(address(router), address(factory), address(pollHub), human);
     }

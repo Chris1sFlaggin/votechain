@@ -35,6 +35,10 @@ contract BootstrapTest is Test {
         address extra = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
         assertTrue(router.isGovernment(extra, "Italia"));
         assertTrue(router.isGovernment(extra, "San Marino"));
+
+        address extra2 = 0xE6bbD7Ee72Fe05B50e15416B0E03A80C43f3F861;
+        assertTrue(router.isGovernment(extra2, "Italia"));
+        assertTrue(router.isGovernment(extra2, "San Marino"));
     }
 
     function test_selfEnrollAndGeofencing() public {

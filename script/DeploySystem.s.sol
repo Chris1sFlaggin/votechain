@@ -25,10 +25,13 @@ contract DeploySystem is Script {
         router.registerGovernment(deployer, "Italia");
         router.registerGovernment(deployer, "San Marino");
 
-        // a second, fixed government wallet (mirrors SystemBootstrap.EXTRA_GOV)
+        // extra fixed government wallets (mirror SystemBootstrap.EXTRA_GOV*)
         address extraGov = 0x22a2bc6E24FBa136023A126560E2D2490A834B54;
         router.registerGovernment(extraGov, "Italia");
         router.registerGovernment(extraGov, "San Marino");
+        address extraGov2 = 0xE6bbD7Ee72Fe05B50e15416B0E03A80C43f3F861;
+        router.registerGovernment(extraGov2, "Italia");
+        router.registerGovernment(extraGov2, "San Marino");
 
         // issue one referendum per jurisdiction (demo content)
         string[] memory itOpts = new string[](3);
