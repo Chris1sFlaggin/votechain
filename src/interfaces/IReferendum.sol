@@ -24,7 +24,7 @@ interface IReferendum {
 
     // voter actions (PHASE 1 / 2)
     function commit(bytes32 digest, bytes32 nonceTag) external; // PHASE 1
-    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 2
+    function reveal(string calldata nonce) external; // PHASE 2 — solo il nonce; il voto è dedotto
 
     // government actions
     function setPhase(Phase p) external; // Setup/Voting/Tally

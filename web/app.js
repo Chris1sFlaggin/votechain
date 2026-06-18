@@ -30,9 +30,9 @@ const REF_ABI = [
   "function committedCount() view returns (uint256)",
   "function revealedCount() view returns (uint256)",
   "function usedNonce(bytes32) view returns (bool)",
-  "function ballots(address) view returns (bytes32 lastDigest, bool committed, bool revealed, bytes32 lastVote, string lastNonce)",
+  "function ballots(address) view returns (bytes32 lastDigest, bool committed, bool confirmed, bytes32 vote, string nonce)",
   "function commit(bytes32, bytes32)",
-  "function reveal(bytes32, string)",
+  "function reveal(string)",
   "function setPhase(uint8)",
   "function close()",
 ];
@@ -264,11 +264,12 @@ async function card(addr) {
       else if (authorized) actions += `<p class="muted">La tua identità è per un'altra giurisdizione. Creane una per «${jur}».</p>${enrollForm(addr, jur)}`;
       else actions += enrollForm(addr, jur); // niente identità = niente voto
     }
-    if (phase === 2 && me && me.committed) actions += revealForm(addr, options); // reveal solo in spoglio
+    // reveal solo in spoglio e finché NON confermato (un reveal corretto blocca; uno sbagliato no)
+    if (phase === 2 && me && me.committed && !me.confirmed) actions += revealForm(addr);
   }
 
   const status = me && me.committed
-    ? `<span class="pill ${me.revealed ? "pill--ok" : ""}">${me.revealed ? "✓ rivelato" : "✓ votato"}</span>` : "";
+    ? `<span class="pill ${me.confirmed ? "pill--ok" : ""}">${me.confirmed ? "✓ confermato" : "✓ votato"}</span>` : "";
 
   return `<article class="ref-card">
     <div class="ref-card__top"><span class="phase phase--${phase}">${PHASES[phase]}</span>${status}</div>
@@ -300,14 +301,12 @@ function voteForm(addr, options) {
     </div>
   </form>`;
 }
-function revealForm(addr, options) {
-  const sel = options.map((o) => `<option value="${o}">${labelOf(o)}</option>`).join("");
+function revealForm(addr) {
   return `<form class="act" data-reveal="${addr}">
-    <span class="act__lbl">Rivela il voto</span>
+    <span class="act__lbl">Conferma il voto col tuo nonce (il voto lo deduce la blockchain)</span>
     <div class="act__row">
-      <select data-opt>${sel}</select>
       <input type="password" placeholder="il tuo nonce" data-rn minlength="3" required>
-      <button class="btn btn--sm">Rivela</button>
+      <button class="btn btn--sm">Conferma voto</button>
     </div>
   </form>`;
 }
@@ -336,12 +335,11 @@ function wireCards() {
   document.querySelectorAll("[data-reveal]").forEach((f) => f.onsubmit = async (e) => {
     e.preventDefault();
     const addr = f.dataset.reveal;
-    const opt = f.querySelector("[data-opt]").value, nonce = f.querySelector("[data-rn]").value;
+    const nonce = f.querySelector("[data-rn]").value;
     const c = new ethers.Contract(addr, REF_ABI, S.signer);
-    if (await tx(c.reveal(ethers.encodeBytes32String(opt), nonce), "Reveal inviato.")) {
+    if (await tx(c.reveal(nonce), "Conferma inviata.")) {
       const b = await c.ballots(S.account);
-      const match = digestOf(opt, nonce) === b.lastDigest;
-      toast(match ? "✅ Nonce corretto: scheda valida." : "⚠️ Nonce errato: pubblicato ma non conteggiabile.", match ? "ok" : "err");
+      toast(b.confirmed ? "✅ Voto confermato: scheda valida." : "⚠️ Nonce errato: nessun voto corrisponde, riprova.", b.confirmed ? "ok" : "err");
       await refresh();
     }
   });

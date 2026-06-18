@@ -69,7 +69,7 @@ contract BootstrapTest is Test {
         vm.prank(gov);
         r.setPhase(IReferendum.Phase.Tally);
         vm.prank(voter);
-        r.reveal(bytes32("si"), "n1");
+        r.reveal("n1");
         vm.prank(gov);
         r.close();
 

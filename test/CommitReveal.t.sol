@@ -85,20 +85,50 @@ contract CommitRevealTest is Test {
         vm.stopPrank();
     }
 
-    /// The last reveal wins, even after an earlier mismatching reveal.
-    function test_multiRevealLastWins() public {
+    /// Reveal takes ONLY the nonce: the contract tries each option with the committed
+    /// nonce and finds the one whose keccak256(option,nonce) matches the stored digest.
+    function test_revealWithOnlyNonceFindsVote() public {
         vm.prank(alice);
         ref.commit(_d(NO, "secret"), _nt("secret"));
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
-        vm.prank(alice); // mismatch, recorded in clear
-        ref.reveal(SI, "x");
-        vm.prank(alice); // match (last)
-        ref.reveal(NO, "secret");
+        vm.prank(alice);
+        ref.reveal("secret"); // niente voto: lo deduce il contratto
+        (, bool committed, bool confirmed, bytes32 vote,) = ref.ballots(alice);
+        assertTrue(committed);
+        assertTrue(confirmed);
+        assertEq(vote, NO);
+    }
+
+    /// A WRONG nonce confirms nothing and can be retried; then the correct one confirms.
+    function test_canRetryAfterWrongReveal() public {
+        vm.prank(alice);
+        ref.commit(_d(NO, "secret"), _nt("secret"));
+        vm.prank(govIT);
+        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(alice);
+        ref.reveal("x"); // nessuna opzione combacia -> non confermato, nessun revert
+        (,, bool confirmedAfterWrong,,) = ref.ballots(alice);
+        assertFalse(confirmedAfterWrong);
+        vm.prank(alice);
+        ref.reveal("secret"); // ora combacia
         vm.prank(govIT);
         ref.close();
         assertEq(ref.result(NO), 1);
         assertEq(ref.result(SI), 0);
+    }
+
+    /// After a CORRECT reveal the ballot is locked: re-revealing reverts.
+    function test_cannotReRevealAfterCorrect() public {
+        vm.prank(alice);
+        ref.commit(_d(NO, "secret"), _nt("secret"));
+        vm.prank(govIT);
+        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(alice);
+        ref.reveal("secret");
+        vm.prank(alice);
+        vm.expectRevert(Errors.AlreadyRevealed.selector);
+        ref.reveal("secret");
     }
 
     function test_verifierMatchMath() public pure {

@@ -92,7 +92,7 @@ contract ReferendumTest is Test {
         ref.commit(_digest(SI, "an"), _nt("an"));
         vm.prank(alice);
         vm.expectRevert(Errors.RevealClosed.selector);
-        ref.reveal(SI, "an");
+        ref.reveal("an");
     }
 
     /// Reveals happen only in Tally; last reveal per wallet wins; count at close.
@@ -106,11 +106,11 @@ contract ReferendumTest is Test {
         ref.setPhase(IReferendum.Phase.Tally);
 
         vm.prank(alice);
-        ref.reveal(NO, "wrong"); // mismatch, still recorded in clear
+        ref.reveal("wrong"); // mismatch, still recorded in clear
         vm.prank(alice);
-        ref.reveal(NO, "an"); // correct (last reveal wins)
+        ref.reveal("an"); // correct (last reveal wins)
         vm.prank(bob);
-        ref.reveal(SI, "bn");
+        ref.reveal("bn");
 
         vm.prank(govIT);
         ref.close();
@@ -126,7 +126,7 @@ contract ReferendumTest is Test {
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(alice);
-        ref.reveal(SI, "bad"); // mismatch -> null
+        ref.reveal("bad"); // mismatch -> null
         vm.prank(govIT);
         ref.close();
         assertEq(ref.result(SI), 0);
@@ -169,7 +169,7 @@ contract ReferendumTest is Test {
         ref.close();
         vm.prank(alice);
         vm.expectRevert(Errors.RevealClosed.selector);
-        ref.reveal(SI, "z");
+        ref.reveal("z");
     }
 
     function test_governmentCannotVote() public {

@@ -19,6 +19,7 @@ library Errors {
     error VotingNotOpen();
     error RevealClosed();
     error NoVote();
+    error AlreadyRevealed(); // a correct reveal already locked this ballot
 
     // lifecycle
     error CloseOnlyFromTally();
@@ -59,7 +60,7 @@ interface IReferendum {
 
     // voter actions (PHASE 1 / 2)
     function commit(bytes32 digest, bytes32 nonceTag) external; // PHASE 1
-    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 2
+    function reveal(string calldata nonce) external; // PHASE 2 — solo il nonce; il voto è dedotto
 
     // government actions
     function setPhase(Phase p) external; // Setup/Voting/Tally
@@ -384,10 +385,10 @@ contract SPIDWalletRouter is Roles {
 ///                    (nonce uniqueness); re-voting allowed, only the last counts.
 ///                    NO reveal here, so no running tally exists before the spoglio.
 ///  PHASE 2 TALLY   — no new digests; reveal opens.
-///  reveal(vote,nonce) [phase 2 only] — publishes the vote IN CLEAR in ANY case;
-///                    the last reveal is kept; the `matches` flag is UX-only.
-///  PHASE 3 CLOSED  — close() counts, per wallet, the last reveal iff
-///                    keccak256(lastVote, lastNonce) == lastDigest.
+///  reveal(nonce) [phase 2 only] — ONLY the nonce: the contract tries each option with
+///                    it and confirms the one whose keccak256(option,nonce) == lastDigest.
+///                    A correct reveal LOCKS the ballot; a wrong nonce can be retried.
+///  PHASE 3 CLOSED  — close() counts, per wallet, the confirmed vote (already validated).
 contract Referendum is IReferendum {
     SPIDWalletRouter public immutable router;
     address private immutable _government;
@@ -403,9 +404,9 @@ contract Referendum is IReferendum {
     struct Ballot {
         bytes32 lastDigest; // only the last digest counts
         bool committed;
-        bool revealed;
-        bytes32 lastVote; // cleartext vote of the last reveal
-        string lastNonce; // nonce of the last reveal
+        bool confirmed; // a CORRECT reveal happened (nonce matched an option) — then locked
+        bytes32 vote; // option found at confirmation (deduced from the nonce)
+        string nonce; // confirmed nonce
     }
     mapping(address => Ballot) public ballots; // wallet k_i => ballot
     mapping(address => uint32) public revisions; // wallet k_i => (re)cast count
@@ -460,16 +461,14 @@ contract Referendum is IReferendum {
         uint256 valid;
         for (uint256 i; i < voters.length; ++i) {
             Ballot storage b = ballots[voters[i]];
-            if (!b.revealed) continue;
-            if (VoteVerifier.matches(b.lastVote, b.lastNonce, b.lastDigest) && _isOption(b.lastVote)) {
-                tally[b.lastVote] += 1;
-                ++valid;
-            }
+            if (!b.confirmed) continue; // solo i voti confermati (nonce corretto) contano
+            tally[b.vote] += 1; // b.vote è già un'opzione valida, dedotta al reveal
+            ++valid;
         }
         finalized = true;
         phase = Phase.Closed;
         emit PhaseChanged(Phase.Closed);
-        emit Finalized(valid, revealedCount - valid);
+        emit Finalized(valid, committedCount - valid); // nulli = committati ma non confermati
     }
 
     // -------------------------------------------------------------------- voter
@@ -500,18 +499,27 @@ contract Referendum is IReferendum {
         emit Committed(msg.sender, d, revisions[msg.sender]);
     }
 
-    /// @notice PHASE 2 (Tally) only: reveal. Recorded IN CLEAR in ANY case; last reveal kept.
-    function reveal(bytes32 vote, string calldata nonce) external override {
+    /// @notice PHASE 2 (Tally) only: reveal with ONLY the nonce. The contract tries each
+    ///         option with the committed nonce and finds the one whose digest matches
+    ///         (reusing VoteVerifier.matches). A correct reveal LOCKS the ballot; a wrong
+    ///         nonce (no option matches) confirms nothing and can be retried.
+    function reveal(string calldata nonce) external override {
         if (phase != Phase.Tally) revert Errors.RevealClosed();
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) revert Errors.NoVote();
-        if (!b.revealed) {
-            b.revealed = true;
-            revealedCount++;
+        if (b.confirmed) revert Errors.AlreadyRevealed();
+        for (uint256 i; i < options.length; ++i) {
+            if (VoteVerifier.matches(options[i], nonce, b.lastDigest)) {
+                b.confirmed = true;
+                b.vote = options[i];
+                b.nonce = nonce;
+                revealedCount++;
+                emit Revealed(msg.sender, options[i], nonce, true);
+                return;
+            }
         }
-        b.lastVote = vote;
-        b.lastNonce = nonce;
-        emit Revealed(msg.sender, vote, nonce, VoteVerifier.matches(vote, nonce, b.lastDigest));
+        // nessuna opzione combacia: nonce errato → non confermato, si può ritentare
+        emit Revealed(msg.sender, bytes32(0), nonce, false);
     }
 
     // -------------------------------------------------------------------- views

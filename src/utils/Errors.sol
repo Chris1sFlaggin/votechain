@@ -17,6 +17,7 @@ library Errors {
     error VotingNotOpen();
     error RevealClosed();
     error NoVote();
+    error AlreadyRevealed(); // a correct reveal already locked this ballot
 
     // lifecycle
     error CloseOnlyFromTally();
