@@ -54,7 +54,8 @@ interface IReferendum {
     function government() external view returns (address);
     function phase() external view returns (Phase);
     function finalized() external view returns (bool);
-    function getOptions() external view returns (bytes32[] memory);
+    function getOptions() external view returns (bytes32[] memory); // unique option ids
+    function getLabels() external view returns (string[] memory); // human labels (parallel)
     function getVoters() external view returns (address[] memory);
     function result(bytes32 option) external view returns (uint256);
 
@@ -398,8 +399,9 @@ contract Referendum is IReferendum {
     Phase public override phase;
     bool public override finalized;
 
-    bytes32[] public options;
-    mapping(bytes32 => uint256) public tally; // option => confirmed votes (set at close)
+    bytes32[] public options; // UNIQUE option ids (two equal labels still get distinct ids)
+    string[] private _labels; // human labels, parallel to options (may repeat)
+    mapping(bytes32 => uint256) public tally; // option id => confirmed votes (set at close)
 
     struct Ballot {
         bytes32 lastDigest; // only the last digest counts
@@ -410,14 +412,16 @@ contract Referendum is IReferendum {
     }
     mapping(address => Ballot) public ballots; // wallet k_i => ballot
     mapping(address => uint32) public revisions; // wallet k_i => (re)cast count
-    mapping(bytes32 => bool) public usedNonce; // nonce domain: keccak(nonce) => used (verifica uniqueness)
+    // nonce domain PER WALLET: voter => keccak(nonce) => used. A reused nonce is rejected
+    // only against the SAME voter's previous commits (not against other users).
+    mapping(address => mapping(bytes32 => bool)) public usedNonce;
     address[] public voters; // participating wallets, for the tally
 
     uint256 public committedCount;
     uint256 public revealedCount;
 
     event Committed(address indexed voter, bytes32 digest, uint32 revision);
-    event Revealed(address indexed voter, bytes32 vote, string nonce, bool matches);
+    event Revealed(address indexed voter, string vote, string nonce, bool matches);
     event PhaseChanged(Phase phase);
     event Finalized(uint256 valid, uint256 nullified);
 
@@ -431,13 +435,18 @@ contract Referendum is IReferendum {
         SPIDWalletRouter _router,
         string memory _title,
         string memory _jurisdiction,
-        bytes32[] memory _options
+        string[] memory optionLabels
     ) {
         _government = gov;
         router = _router;
         title = _title;
         jurisdiction = _jurisdiction;
-        options = _options;
+        // each option gets a UNIQUE id even if two labels are identical (e.g. omonymous
+        // candidates): id = keccak256(this, index, label). The label is kept for display.
+        for (uint256 i; i < optionLabels.length; ++i) {
+            _labels.push(optionLabels[i]);
+            options.push(keccak256(abi.encodePacked(address(this), i, optionLabels[i])));
+        }
         phase = Phase.Voting; // open immediately once issued
         emit PhaseChanged(phase);
     }
@@ -475,8 +484,9 @@ contract Referendum is IReferendum {
     /// @notice PHASE 1: publish a hiding digest of your vote (geofenced + unique).
     /// @param d        keccak256(vote, nonce) — hides the vote until reveal.
     /// @param nonceTag keccak256(nonce) — vote-independent nonce commitment. Uniqueness
-    ///                 is checked on this, so a reused nonce is rejected with the same
-    ///                 OR a different vote. The frontend computes both client-side.
+    ///                 is checked per-wallet on this, so a reused nonce is rejected with
+    ///                 the same OR a different vote, but only against the caller's own
+    ///                 commits (other voters may reuse it). Frontend computes both.
     function commit(bytes32 d, bytes32 nonceTag) external override {
         if (phase != Phase.Voting) revert Errors.VotingNotOpen();
         // separation of powers: a government cannot vote in its own jurisdiction
@@ -486,8 +496,8 @@ contract Referendum is IReferendum {
             if (!router.isAuthorized(address(this), msg.sender)) revert Errors.WalletNotAuthorized();
             revert Errors.OutOfJurisdiction();
         }
-        if (!VoteVerifier.verifica(usedNonce, nonceTag)) revert Errors.NonceGiaUtilizzato();
-        usedNonce[nonceTag] = true;
+        if (!VoteVerifier.verifica(usedNonce[msg.sender], nonceTag)) revert Errors.NonceGiaUtilizzato();
+        usedNonce[msg.sender][nonceTag] = true;
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) {
             b.committed = true;
@@ -514,17 +524,22 @@ contract Referendum is IReferendum {
                 b.vote = options[i];
                 b.nonce = nonce;
                 revealedCount++;
-                emit Revealed(msg.sender, options[i], nonce, true);
+                emit Revealed(msg.sender, _labels[i], nonce, true); // label leggibile nell'evento
                 return;
             }
         }
         // nessuna opzione combacia: nonce errato → non confermato, si può ritentare
-        emit Revealed(msg.sender, bytes32(0), nonce, false);
+        emit Revealed(msg.sender, "", nonce, false);
     }
 
     // -------------------------------------------------------------------- views
     function getOptions() external view override returns (bytes32[] memory) {
         return options;
+    }
+
+    /// @notice Human labels parallel to getOptions() (display only; may repeat).
+    function getLabels() external view override returns (string[] memory) {
+        return _labels;
     }
 
     function getVoters() external view override returns (address[] memory) {
@@ -568,14 +583,14 @@ contract GovFactory {
         router = _router;
     }
 
-    function createReferendum(string calldata title, string calldata jurisdiction, bytes32[] calldata options)
+    function createReferendum(string calldata title, string calldata jurisdiction, string[] calldata optionLabels)
         external
         returns (address)
     {
         if (!router.isGovernment(msg.sender, jurisdiction)) revert Errors.NotGovernment();
-        if (options.length < 2) revert Errors.EmptyOptions();
+        if (optionLabels.length < 2) revert Errors.EmptyOptions();
 
-        Referendum r = new Referendum(msg.sender, router, title, jurisdiction, options);
+        Referendum r = new Referendum(msg.sender, router, title, jurisdiction, optionLabels);
         _referenda.push(address(r));
         emit ReferendumCreated(address(r), msg.sender, jurisdiction, title);
         return address(r);

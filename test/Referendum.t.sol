@@ -19,9 +19,9 @@ contract ReferendumTest is Test {
     address bob = makeAddr("bob"); // Italia
     address sara = makeAddr("sara"); // San Marino
 
-    bytes32 constant SI = bytes32("si");
-    bytes32 constant NO = bytes32("no");
-    bytes32 constant BIANCA = bytes32("bianca");
+    bytes32 SI; // id opzioni, letti dal referendum dopo la creazione (label != id)
+    bytes32 NO;
+    bytes32 BIANCA;
 
     function setUp() public {
         router = new SPIDWalletRouter(); // this test = ADMIN + ORACLE
@@ -29,7 +29,11 @@ contract ReferendumTest is Test {
         router.registerGovernment(govIT, "Italia");
 
         vm.prank(govIT);
-        ref = Referendum(factory.createReferendum("Referendum Test", "Italia", _opts()));
+        ref = Referendum(factory.createReferendum("Referendum Test", "Italia", _labels()));
+        bytes32[] memory o = ref.getOptions();
+        SI = o[0];
+        NO = o[1];
+        BIANCA = o[2];
 
         // voters self-enrol a (fake) SPID identity PER referendum (no CF on-chain)
         vm.prank(alice);
@@ -40,11 +44,11 @@ contract ReferendumTest is Test {
         router.simulatedSpidLogin(address(ref), "San Marino");
     }
 
-    function _opts() internal pure returns (bytes32[] memory a) {
-        a = new bytes32[](3);
-        a[0] = SI;
-        a[1] = NO;
-        a[2] = BIANCA;
+    function _labels() internal pure returns (string[] memory a) {
+        a = new string[](3);
+        a[0] = "si";
+        a[1] = "no";
+        a[2] = "bianca";
     }
 
     function _digest(bytes32 v, string memory n) internal pure returns (bytes32) {
@@ -157,7 +161,7 @@ contract ReferendumTest is Test {
     function test_govCannotCreateOutsideJurisdiction() public {
         vm.prank(govIT);
         vm.expectRevert(Errors.NotGovernment.selector);
-        factory.createReferendum("X", "San Marino", _opts());
+        factory.createReferendum("X", "San Marino", _labels());
     }
 
     function test_revealBlockedAfterClose() public {
@@ -185,7 +189,7 @@ contract ReferendumTest is Test {
     /// referendum, even in the same jurisdiction. You must create a fresh identity.
     function test_identityIsPerReferendum() public {
         vm.prank(govIT);
-        Referendum ref2 = Referendum(factory.createReferendum("Referendum 2", "Italia", _opts()));
+        Referendum ref2 = Referendum(factory.createReferendum("Referendum 2", "Italia", _labels()));
 
         // alice is enrolled for `ref` but never for `ref2`
         vm.prank(alice);

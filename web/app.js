@@ -15,7 +15,7 @@ const ROUTER_ABI = [
   "function isGovernment(address, string) view returns (bool)",
 ];
 const FACTORY_ABI = [
-  "function createReferendum(string, string, bytes32[]) returns (address)",
+  "function createReferendum(string, string, string[]) returns (address)",
   "function getReferenda() view returns (address[])",
 ];
 const REF_ABI = [
@@ -25,11 +25,12 @@ const REF_ABI = [
   "function phase() view returns (uint8)",
   "function finalized() view returns (bool)",
   "function getOptions() view returns (bytes32[])",
+  "function getLabels() view returns (string[])",
   "function getVoters() view returns (address[])",
   "function result(bytes32) view returns (uint256)",
   "function committedCount() view returns (uint256)",
   "function revealedCount() view returns (uint256)",
-  "function usedNonce(bytes32) view returns (bool)",
+  "function usedNonce(address, bytes32) view returns (bool)",
   "function ballots(address) view returns (bytes32 lastDigest, bool committed, bool confirmed, bytes32 vote, string nonce)",
   "function commit(bytes32, bytes32)",
   "function reveal(string)",
@@ -56,8 +57,9 @@ const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
 // Decode difensivo: un'opzione non-decodificabile non deve far saltare l'intera lista.
 const decodeOpt = (b) => { try { return ethers.decodeBytes32String(b); } catch { return String(b); } };
-const digestOf = (voteId, nonce) =>
-  ethers.solidityPackedKeccak256(["bytes32", "string"], [ethers.encodeBytes32String(voteId), nonce]);
+// optionId è già un bytes32 (id unico letto da getOptions); il digest nasconde il voto.
+const digestOf = (optionId, nonce) =>
+  ethers.solidityPackedKeccak256(["bytes32", "string"], [optionId, nonce]);
 // impegno sul nonce, indipendente dal voto: l'unicità è su questo → nonce riusato = errore
 // qualunque sia il voto (mentre il digest tiene nascosto il voto fino al reveal).
 const nonceTagOf = (nonce) => ethers.solidityPackedKeccak256(["string"], [nonce]);
@@ -184,8 +186,8 @@ $("createRef").onclick = async () => {
   const jur = $("newJur").value;
   const opts = $("newOpts").value.split("\n").map((s) => s.trim()).filter(Boolean);
   if (!title || opts.length < 2) return toast("Titolo + almeno 2 opzioni.", "err");
-  const b32 = opts.map((o) => ethers.encodeBytes32String(o));
-  const ok = await tx(S.factory.createReferendum(title, jur, b32), `Referendum «${title}» emanato.`);
+  // le opzioni vanno come testo: il contratto assegna a ognuna un id UNICO (anche se il testo è uguale)
+  const ok = await tx(S.factory.createReferendum(title, jur, opts), `Referendum «${title}» emanato.`);
   if (ok) { $("newTitle").value = ""; $("newOpts").value = ""; await refresh(); }
 };
 
@@ -215,13 +217,14 @@ function cardError(addr, e) {
 
 async function card(addr) {
   const c = new ethers.Contract(addr, REF_ABI, S.signer || S.provider);
-  const [title, jur, gov, phaseRaw, finalized, optsRaw, committed, revealed] = await Promise.all([
-    c.title(), c.jurisdiction(), c.government(), c.phase(), c.finalized(), c.getOptions(),
+  const [title, jur, gov, phaseRaw, finalized, ids, labels, committed, revealed] = await Promise.all([
+    c.title(), c.jurisdiction(), c.government(), c.phase(), c.finalized(), c.getOptions(), c.getLabels(),
     c.committedCount(), c.revealedCount(),
   ]);
   seenJur.add(jur);
   const phase = Number(phaseRaw);
-  const options = optsRaw.map(decodeOpt);
+  // opzione = { id univoco (per il voto), label (testo mostrato, può ripetersi) }
+  const options = ids.map((id, i) => ({ id, label: labels[i] ?? decodeOpt(id) }));
   const isGovOfThis = S.account && gov.toLowerCase() === S.account.toLowerCase();
   const me = await c.ballots(S.account).catch(() => null);
 
@@ -241,15 +244,15 @@ async function card(addr) {
   // Prima della chiusura non si mostra nessun conteggio (niente exit-poll on-chain in UI).
   let results;
   if (finalized) {
-    const counts = await Promise.all(optsRaw.map((o) => c.result(o).then(Number).catch(() => 0)));
+    const counts = await Promise.all(ids.map((id) => c.result(id).then(Number).catch(() => 0)));
     const total = counts.reduce((a, b) => a + b, 0);
     results = `<div class="bars">` + options.map((o, i) => {
       const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
-      return `<div class="bar"><div class="bar__l"><span>${labelOf(o)}</span><b>${v}${total ? ` · ${pct}%` : ""}</b></div>
+      return `<div class="bar"><div class="bar__l"><span>${labelOf(o.label)}</span><b>${v}${total ? ` · ${pct}%` : ""}</b></div>
         <div class="bar__t"><div class="bar__f" style="width:${pct}%"></div></div></div>`;
     }).join("") + `</div>`;
   } else {
-    results = `<div class="sealed">🔒 Esiti visibili solo dopo lo spoglio · opzioni: ${options.map(labelOf).join(" · ")}</div>`;
+    results = `<div class="sealed">🔒 Esiti visibili solo dopo lo spoglio · opzioni: ${options.map((o) => labelOf(o.label)).join(" · ")}</div>`;
   }
 
   let actions = "";
@@ -291,7 +294,7 @@ function enrollForm(addr, jur) {
 
 function voteForm(addr, options) {
   const radios = options.map((o, i) =>
-    `<label class="opt"><input type="radio" name="v-${addr}" value="${o}" ${i === 0 ? "checked" : ""}><span>${labelOf(o)}</span></label>`).join("");
+    `<label class="opt"><input type="radio" name="v-${addr}" value="${o.id}" ${i === 0 ? "checked" : ""}><span>${labelOf(o.label)}</span></label>`).join("");
   return `<form class="act" data-vote="${addr}">
     <div class="opts">${radios}</div>
     <div class="act__row">
@@ -329,7 +332,7 @@ function wireCards() {
     const c = new ethers.Contract(addr, REF_ABI, S.signer);
     const d = digestOf(opt, n1);
     const nt = nonceTagOf(n1);
-    if (await c.usedNonce(nt)) return toast("Nonce già usato in questo referendum (con qualsiasi voto): scegline un altro.", "err");
+    if (await c.usedNonce(S.account, nt)) return toast("Hai già usato questo nonce in questo referendum (con qualsiasi voto): scegline un altro.", "err");
     if (await tx(c.commit(d, nt), "Voto registrato sulla blockchain.")) await refresh();
   });
   document.querySelectorAll("[data-reveal]").forEach((f) => f.onsubmit = async (e) => {
@@ -368,7 +371,7 @@ const EXPLORER_IFACE = new ethers.Interface([
   "event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction)",
   "event ReferendumCreated(address indexed referendum, address indexed government, string jurisdiction, string title)",
   "event Committed(address indexed voter, bytes32 digest, uint32 revision)",
-  "event Revealed(address indexed voter, bytes32 vote, string nonce, bool matches)",
+  "event Revealed(address indexed voter, string vote, string nonce, bool matches)",
   "event PhaseChanged(uint8 phase)",
   "event Finalized(uint256 valid, uint256 nullified)",
   "event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake)",
@@ -408,9 +411,9 @@ const EVT_META = {
   },
   Revealed: {
     ico: "🔓", kind: "reveal", title: "Voto rivelato (spoglio)",
-    sum: (a) => `${decodeOpt(a.vote)} — ${a.matches ? "valido ✓" : "hash non combacia ✗"}`,
-    why: "Durante lo spoglio l'elettore svela voto + nonce in chiaro. Chiunque può ricalcolare l'hash e verificare che combaci con quello depositato prima: il conteggio è verificabile da tutti.",
-    data: (a) => [["Elettore", shortA(a.voter)], ["Voto in chiaro", decodeOpt(a.vote)], ["Nonce", a.nonce], ["Hash combacia?", a.matches ? "sì" : "no"]],
+    sum: (a) => `${a.matches ? labelOf(a.vote) : "nonce errato"} — ${a.matches ? "valido ✓" : "nessun voto ✗"}`,
+    why: "Durante lo spoglio l'elettore manda solo il nonce: il contratto prova ogni opzione e trova quale combacia col digest depositato. Chiunque può verificare il conteggio. Un nonce errato non conferma nulla (ritentabile).",
+    data: (a) => [["Elettore", shortA(a.voter)], ["Voto dedotto", a.matches ? labelOf(a.vote) : "—"], ["Nonce", a.nonce], ["Confermato?", a.matches ? "sì" : "no"]],
   },
   PhaseChanged: {
     ico: "⏱️", kind: "phase", title: "Cambio fase",

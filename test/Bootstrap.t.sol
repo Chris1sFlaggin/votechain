@@ -49,10 +49,10 @@ contract BootstrapTest is Test {
         assertFalse(router.canVote(address(r), voter, "San Marino"));
     }
 
-    function _twoOpts() internal pure returns (bytes32[] memory opts) {
-        opts = new bytes32[](2);
-        opts[0] = bytes32("si");
-        opts[1] = bytes32("no");
+    function _twoOpts() internal pure returns (string[] memory opts) {
+        opts = new string[](2);
+        opts[0] = "si";
+        opts[1] = "no";
     }
 
     function test_fullFlowFromBootstrappedSystem() public {
@@ -62,7 +62,8 @@ contract BootstrapTest is Test {
         vm.prank(voter);
         router.simulatedSpidLogin(address(r), "Italia");
 
-        bytes32 digest = keccak256(abi.encodePacked(bytes32("si"), "n1"));
+        bytes32 siId = r.getOptions()[0]; // id unico dell'opzione "si"
+        bytes32 digest = keccak256(abi.encodePacked(siId, "n1"));
         bytes32 nonceTag = keccak256(bytes("n1"));
         vm.prank(voter);
         r.commit(digest, nonceTag);
@@ -73,6 +74,6 @@ contract BootstrapTest is Test {
         vm.prank(gov);
         r.close();
 
-        assertEq(r.result(bytes32("si")), 1);
+        assertEq(r.result(siId), 1);
     }
 }

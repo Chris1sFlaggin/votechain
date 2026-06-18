@@ -31,15 +31,15 @@ contract DeploySystem is Script {
         router.registerGovernment(extraGov, "San Marino");
 
         // issue one referendum per jurisdiction (demo content)
-        bytes32[] memory itOpts = new bytes32[](3);
-        itOpts[0] = bytes32("si");
-        itOpts[1] = bytes32("no");
-        itOpts[2] = bytes32("bianca");
+        string[] memory itOpts = new string[](3);
+        itOpts[0] = "si";
+        itOpts[1] = "no";
+        itOpts[2] = "bianca";
         address refIT = factory.createReferendum("Referendum Costituzionale 2026", "Italia", itOpts);
 
-        bytes32[] memory smOpts = new bytes32[](2);
-        smOpts[0] = bytes32("si");
-        smOpts[1] = bytes32("no");
+        string[] memory smOpts = new string[](2);
+        smOpts[0] = "si";
+        smOpts[1] = "no";
         address refSM = factory.createReferendum("Referendum di San Marino 2026", "San Marino", smOpts);
 
         vm.stopBroadcast();

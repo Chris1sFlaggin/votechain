@@ -20,14 +20,14 @@ contract GovFactory {
         router = _router;
     }
 
-    function createReferendum(string calldata title, string calldata jurisdiction, bytes32[] calldata options)
+    function createReferendum(string calldata title, string calldata jurisdiction, string[] calldata optionLabels)
         external
         returns (address)
     {
         if (!router.isGovernment(msg.sender, jurisdiction)) revert Errors.NotGovernment();
-        if (options.length < 2) revert Errors.EmptyOptions();
+        if (optionLabels.length < 2) revert Errors.EmptyOptions();
 
-        Referendum r = new Referendum(msg.sender, router, title, jurisdiction, options);
+        Referendum r = new Referendum(msg.sender, router, title, jurisdiction, optionLabels);
         _referenda.push(address(r));
         emit ReferendumCreated(address(r), msg.sender, jurisdiction, title);
         return address(r);

@@ -19,19 +19,22 @@ contract CommitRevealTest is Test {
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
 
-    bytes32 constant SI = bytes32("si");
-    bytes32 constant NO = bytes32("no");
+    bytes32 SI; // id opzioni letti dal referendum (label != id)
+    bytes32 NO;
 
     function setUp() public {
         router = new SPIDWalletRouter();
         factory = new GovFactory(router);
         router.registerGovernment(govIT, "Italia");
 
-        bytes32[] memory opts = new bytes32[](2);
-        opts[0] = SI;
-        opts[1] = NO;
+        string[] memory labels = new string[](2);
+        labels[0] = "si";
+        labels[1] = "no";
         vm.prank(govIT);
-        ref = Referendum(factory.createReferendum("R", "Italia", opts));
+        ref = Referendum(factory.createReferendum("R", "Italia", labels));
+        bytes32[] memory o = ref.getOptions();
+        SI = o[0];
+        NO = o[1];
 
         vm.prank(alice);
         router.simulatedSpidLogin(address(ref), "Italia");
@@ -47,14 +50,18 @@ contract CommitRevealTest is Test {
         return keccak256(bytes(n)); // impegno sul nonce, indipendente dal voto
     }
 
-    /// The digest excludes the voter, so identical (vote,nonce) from two voters collide.
-    function test_sameVoteNonceCollides() public {
+    /// Nonce uniqueness is PER-WALLET: two different voters may use the same nonce
+    /// (it is only compared against the caller's own previous commits).
+    function test_sameNonceDifferentVotersAllowed() public {
         bytes32 d = _d(SI, "dup");
         vm.prank(alice);
         ref.commit(d, _nt("dup"));
         vm.prank(bob);
-        vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
-        ref.commit(d, _nt("dup"));
+        ref.commit(d, _nt("dup")); // stesso nonce, altro wallet -> consentito
+        (, bool aliceC,,,) = ref.ballots(alice);
+        (, bool bobC,,,) = ref.ballots(bob);
+        assertTrue(aliceC);
+        assertTrue(bobC);
     }
 
     /// Re-voting with the same nonce is rejected (must pick a fresh nonce).
@@ -132,9 +139,10 @@ contract CommitRevealTest is Test {
     }
 
     function test_verifierMatchMath() public pure {
-        bytes32 d = keccak256(abi.encodePacked(SI, "abc"));
-        assertTrue(VoteVerifier.matches(SI, "abc", d));
-        assertFalse(VoteVerifier.matches(SI, "abd", d));
-        assertFalse(VoteVerifier.matches(NO, "abc", d));
+        bytes32 v = bytes32("si");
+        bytes32 d = keccak256(abi.encodePacked(v, "abc"));
+        assertTrue(VoteVerifier.matches(v, "abc", d));
+        assertFalse(VoteVerifier.matches(v, "abd", d));
+        assertFalse(VoteVerifier.matches(bytes32("no"), "abc", d));
     }
 }

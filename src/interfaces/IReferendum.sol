@@ -18,7 +18,8 @@ interface IReferendum {
     function government() external view returns (address);
     function phase() external view returns (Phase);
     function finalized() external view returns (bool);
-    function getOptions() external view returns (bytes32[] memory);
+    function getOptions() external view returns (bytes32[] memory); // unique option ids
+    function getLabels() external view returns (string[] memory); // human labels (parallel)
     function getVoters() external view returns (address[] memory);
     function result(bytes32 option) external view returns (uint256);
 

@@ -40,8 +40,9 @@ remix/
 
 - **Fase 1 — Voting**: solo `commit(digest, nonceTag)` con `digest = keccak256(voto,
   nonce)` (nasconde il voto) e `nonceTag = keccak256(nonce)` (impegno sul solo nonce).
-  `verifica()` rifiuta un `nonceTag` già presente → **ogni nonce è univoco, e un nonce
-  riusato dà errore anche con un voto diverso**. Rivoto consentito (nonce nuovo), conta
+  `verifica()` rifiuta un `nonceTag` già usato **dallo stesso wallet** → un nonce riusato
+  dà errore anche con un voto diverso, ma **solo confrontandolo con i tuoi voti** (due
+  elettori diversi possono usare lo stesso nonce). Rivoto consentito (nonce nuovo), conta
   solo l'ultimo. **Nessun reveal qui**: prima dello spoglio non esiste alcun conteggio.
 - **Fase 2 — Tally (spoglio)**: niente nuovi digest; **si apre il `reveal`**.
 - **`reveal(nonce)`** (solo Fase 2): si passa **solo il nonce**. Il contratto prova
@@ -133,8 +134,8 @@ Le chiamate che il frontend fa ai contratti (identiche all'e2e provato con
 
 ```js
 await router.simulatedSpidLogin(referendum.target, "Italia"); // identità per QUESTO referendum
-const vote     = ethers.encodeBytes32String("si");
-const digest   = ethers.solidityPackedKeccak256(["bytes32","string"], [vote, "tramonto-42"]);
+const ids      = await referendum.getOptions();   // id UNICI delle opzioni (label != id)
+const digest   = ethers.solidityPackedKeccak256(["bytes32","string"], [ids[0], "tramonto-42"]);
 const nonceTag = ethers.solidityPackedKeccak256(["string"], ["tramonto-42"]); // impegno sul nonce
 await referendum.commit(digest, nonceTag);   // Fase 1 (commit; nonce riusato = errore, anche con voto diverso)
 await referendum.setPhase(2);                // governo: apre lo spoglio
@@ -159,8 +160,9 @@ Senza installare nulla, su <https://remix.ethereum.org>:
    ADMIN/ORACLE e governo di Italia e San Marino, e registra anche un **secondo
    wallet governativo fisso** (`EXTRA_GOV = 0x22a2…834B54`).
 5. Espandi `SystemBootstrap` → leggi `router()` e `factory()` (o `addresses()`).
-6. *At Address* su `GovFactory` (indirizzo `factory()`) → `createReferendum("Titolo","Italia",["0x7369…","0x6e6f…"])`
-   (le opzioni sono `bytes32`: usa *string → bytes32* o `cast format-bytes32-string`).
+6. *At Address* su `GovFactory` (indirizzo `factory()`) → `createReferendum("Titolo","Italia",["si","no"])`
+   (le opzioni sono **testo**: il contratto assegna a ognuna un **id univoco**, così due
+   opzioni con lo stesso testo restano distinte; la label si legge da `getLabels()`).
 7. Da un altro account: *At Address* su `SPIDWalletRouter` →
    `simulatedSpidLogin(<indirizzo del Referendum>, "Italia")` (identità fittizia
    **dedicata a quel referendum**, nessun dato personale on-chain), poi `commit`
@@ -196,7 +198,8 @@ Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
 | Niente voto senza identità creata | `Referendum.commit` → `WalletNotAuthorized` se manca l'identità per quel referendum |
 | Identità accessibile fino alla scadenza (chiusura) | UI: pseudonimo mostrato finché `phase != Closed` |
 | `digest = keccak256(voto, nonce)` | `VoteVerifier.digest` |
-| `verifica()` unicità del **nonce** (errore anche con voto diverso) | `VoteVerifier.verifica` su `nonceTag=keccak(nonce)` + `usedNonce` in `Referendum.commit` |
+| Opzioni con **id univoco** (due testi uguali restano distinti) | `Referendum` ctor: `id=keccak(this,index,label)`; label in `getLabels()` |
+| `verifica()` unicità del **nonce per-wallet** (errore anche con voto diverso, ma solo sui tuoi voti) | `VoteVerifier.verifica` su `usedNonce[msg.sender][keccak(nonce)]` in `Referendum.commit` |
 | Rivoto con nonce nuovo, vale l'ultimo | `Referendum.commit` (lastDigest) |
 | Reveal col **solo nonce** (voto dedotto), **solo Fase 2**; corretto blocca, errato ritentabile | `Referendum.reveal(nonce)` (gate su `Phase.Tally` + `AlreadyRevealed`) |
 | Conteggio differito alla chiusura | `Referendum.close` |
