@@ -208,6 +208,26 @@ body[data-screen="social"] .empty,body[data-screen="social"] .muted{color:#9aa3b
 @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 
+/* deck "Tinder" del governo (sola visualizzazione, swipe) */
+.deck{max-width:520px;margin:0 auto;padding:.5rem 0 5rem}
+.deck-hint{color:#9aa3b8;font-size:.85rem;text-align:center;margin:.2rem 0 1.1rem}
+.deck-stack{position:relative;min-height:280px;display:flex;justify-content:center;align-items:flex-start}
+.deck-card{width:100%;background:#101015;border:1px solid #23232e;border-radius:20px;padding:1.2rem 1.3rem;
+  box-shadow:0 16px 40px rgba(0,0,0,.55);cursor:grab;touch-action:pan-y;user-select:none}
+.deck-card:active{cursor:grabbing}
+.deck-card .poll__q{color:#fff}
+.deck-card .poll__head{color:#8a8f9e}
+.deck-card .poll__stake{background:#2a0010;color:#ff5c7a}
+.deck-card .bar__l{color:#fff}
+.deck-card .bar__t{background:#23232e}
+.deck-card .bar__f{background:linear-gradient(90deg,#ff2d55,#ff7a98)}
+.deck-ctl{display:flex;align-items:center;justify-content:center;gap:1.4rem;margin-top:1.2rem}
+.deck-ctl .btn{width:3rem;height:3rem;border-radius:50%;font-size:1.4rem;display:grid;place-items:center;
+  background:#15151a;color:#fff;border:1px solid #2a2a36}
+.deck-ctl .btn:hover{border-color:#ff2d55;color:#ff2d55;transform:none}
+#deckPos{color:#9aa3b8;font-weight:700;min-width:64px;text-align:center}
+.deck-empty{text-align:center;color:#9aa3b8;background:#101015;border:1px dashed #2a2a36;border-radius:16px;padding:2rem 1rem}
+
 /* ===== social theme ===== */
 .btn--social{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;border:none}
 .social-hero{text-align:center;color:#fff;border-radius:22px;padding:2.4rem 1.4rem;margin:1.2rem 0;

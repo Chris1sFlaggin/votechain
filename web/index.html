@@ -6,7 +6,7 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body data-screen="access">
@@ -106,13 +106,14 @@
 
     <!-- ============================================================ SOCIAL -->
     <div id="socialView" class="social">
-      <section class="social-hero">
-        <h1>🔥 La community vota</h1>
-        <p>Sondaggi aperti a tutti: metti una piccola <b>cauzione</b>, la riprendi se il tuo sondaggio diventa <b>significativo</b> 💸. Niente SPID. Tocca <b>➕</b> in basso per crearne uno.</p>
+      <section class="social-hero" id="socialHero">
+        <h1>La community vota</h1>
+        <p>Sondaggi aperti a tutti: metti una piccola <b>cauzione</b>, la riprendi se il tuo sondaggio diventa <b>significativo</b>. Niente SPID. Usa il "+" in basso per crearne uno.</p>
         <button id="connectSocial" class="btn btn--social btn--xl">Connetti wallet</button>
       </section>
 
       <div id="pollFeed" class="poll-feed"></div>
+      <div id="govDeck" class="deck hidden"></div>
     </div>
 
   </main>
@@ -123,25 +124,25 @@
 
   <!-- bottom nav social (stile app) -->
   <nav id="socialNav" class="snav-bar">
-    <button class="snav is-active" data-snav="feed"><i>🏠</i>Feed</button>
-    <button class="snav snav--create" data-snav="create"><i>➕</i>Crea</button>
-    <button class="snav" data-snav="switch"><i>⛓</i>Sezioni</button>
+    <button class="snav is-active" data-snav="feed">Feed</button>
+    <button class="snav snav--create" data-snav="create"><i>+</i>Crea</button>
+    <button class="snav" data-snav="switch">Sezioni</button>
   </nav>
 
   <!-- bottom-sheet creazione sondaggio -->
   <div id="pollSheet" class="poll-sheet">
     <div class="poll-sheet__panel">
       <div class="poll-sheet__grab"></div>
-      <h2>✨ Crea un sondaggio</h2>
-      <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza 🍕 o Pasta 🍝?" autocomplete="off"></label>
+      <h2>Crea un sondaggio</h2>
+      <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza o Pasta?" autocomplete="off"></label>
       <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
       <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
-      <button id="createPoll" class="btn btn--social btn--xl">🚀 Pubblica sondaggio</button>
-      <p class="note">Il sondaggio <b>vince</b> quando è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione 💸, altrimenti resta bloccata (anti-spam).</p>
+      <button id="createPoll" class="btn btn--social btn--xl">Pubblica sondaggio</button>
+      <p class="note">Il sondaggio <b>vince</b> quando è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione, altrimenti resta bloccata (anti-spam).</p>
     </div>
   </div>
 
-  <script src="config.js?v=13"></script>
-  <script src="app.js?v=13"></script>
+  <script src="config.js?v=14"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>
