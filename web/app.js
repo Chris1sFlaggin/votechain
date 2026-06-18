@@ -8,10 +8,10 @@ const seenJur = new Set(["Italia", "San Marino"]);
 const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "", chainId: 11155111 };
 
 const ROUTER_ABI = [
-  "function simulatedSpidLogin(string jurisdiction)",
-  "function isAuthorized(address) view returns (bool)",
-  "function jurisdictionOf(address) view returns (string)",
-  "function canVote(address, string) view returns (bool)",
+  "function simulatedSpidLogin(address referendum, string jurisdiction)",
+  "function isAuthorized(address, address) view returns (bool)",
+  "function jurisdictionOf(address, address) view returns (string)",
+  "function canVote(address, address, string) view returns (bool)",
   "function isGovernment(address, string) view returns (bool)",
 ];
 const FACTORY_ABI = [
@@ -58,6 +58,10 @@ const labelOf = (id) => LABELS[id] || id;
 const decodeOpt = (b) => { try { return ethers.decodeBytes32String(b); } catch { return String(b); } };
 const digestOf = (voteId, nonce) =>
   ethers.solidityPackedKeccak256(["bytes32", "string"], [ethers.encodeBytes32String(voteId), nonce]);
+// pseudonimo per-referendum: identità "finta" mostrata a video, derivata da (wallet, referendum).
+// Non è on-chain (on-chain c'è solo la giurisdizione); serve solo a far vedere all'utente la sua identità.
+const pseudoId = (wallet, ref) =>
+  "SPID-" + ethers.solidityPackedKeccak256(["address", "address"], [wallet, ref]).slice(2, 10).toUpperCase();
 
 function avatar(addr) {
   const h = addr.toLowerCase();
@@ -140,7 +144,6 @@ async function refresh() {
   IS_GOV = GOV_JURS.length > 0;
   renderIdentity();
   gateAreas();
-  if (!IS_GOV) await refreshSpidStatus();
   await renderReferenda();
 }
 
@@ -166,29 +169,8 @@ function gateAreas() {
   }
 }
 
-// -------------------------------------------------------------------- SPID
-$("spidRandom").onclick = () => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let s = ""; for (let i = 0; i < 16; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  $("spidCf").value = s;
-};
-$("spidLogin").onclick = async () => {
-  if (!S.router) return toast("Connetti il wallet (Sepolia) prima.", "err");
-  const jur = $("spidJur").value.trim();
-  if (!jur) return toast("Inserisci la giurisdizione.", "err");
-  // Nome/cognome/CF restano solo a video (UX SPID): NIENTE va on-chain, solo la giurisdizione.
-  const ok = await tx(S.router.simulatedSpidLogin(jur), "Identità SPID creata — on-chain solo la giurisdizione, nessun dato personale.");
-  if (ok) { $("spidCf").value = ""; $("spidNome").value = ""; $("spidCognome").value = ""; await refresh(); }
-};
-async function refreshSpidStatus() {
-  try {
-    const auth = await S.router.isAuthorized(S.account);
-    const jur = auth ? await S.router.jurisdictionOf(S.account) : null;
-    $("spidStatus").textContent = auth
-      ? `✅ Identità attiva — giurisdizione: ${jur}. Puoi votare i referendum qui sotto.`
-      : "Crea un'identità SPID simulata per poter votare.";
-  } catch {}
-}
+// L'identità SPID NON è più globale: si crea per-referendum, dal riquadro di ciascun
+// referendum (vedi card()/wireCards). Niente login SPID globale qui.
 
 // ----------------------------------------------------------------- governo
 $("createRef").onclick = async () => {
@@ -237,6 +219,18 @@ async function card(addr) {
   const isGovOfThis = S.account && gov.toLowerCase() === S.account.toLowerCase();
   const me = await c.ballots(S.account).catch(() => null);
 
+  // Identità SPID PER-REFERENDUM (finta): l'autorizzazione esiste solo per (referendum, wallet).
+  // Resta accessibile fino alla chiusura (phase 3 = Closed): dopo lo spoglio non si mostra più.
+  const authorized = (!IS_GOV && S.account)
+    ? await S.router.isAuthorized(addr, S.account).catch(() => false) : false;
+  const canVote = authorized
+    ? await S.router.canVote(addr, S.account, jur).catch(() => false) : false;
+  let identity = "";
+  if (authorized && phase !== 3) {
+    identity = `<div class="ident">🪪 Identità: <code>${pseudoId(S.account, addr)}</code> · 📍 ${jur}
+      <span class="ident__exp">valida fino alla chiusura</span></div>`;
+  }
+
   // SEGRETEZZA: gli esiti sono sigillati finché il referendum non è chiuso (close()).
   // Prima della chiusura non si mostra nessun conteggio (niente exit-poll on-chain in UI).
   let results;
@@ -259,10 +253,12 @@ async function card(addr) {
       <button class="btn btn--sm btn--gov" data-act="close" data-ref="${addr}" ${phase !== 2 ? "disabled" : ""}>Chiudi e conta</button>
     </div>`;
   } else if (!IS_GOV) {
-    const canVote = await S.router.canVote(S.account, jur).catch(() => false);
-    if (phase === 1 && canVote) actions += voteForm(addr, options);
+    if (phase === 1) {
+      if (canVote) actions += voteForm(addr, options);
+      else if (authorized) actions += `<p class="muted">La tua identità è per un'altra giurisdizione. Creane una per «${jur}».</p>${enrollForm(addr, jur)}`;
+      else actions += enrollForm(addr, jur); // niente identità = niente voto
+    }
     if (phase === 2 && me && me.committed) actions += revealForm(addr, options); // reveal solo in spoglio
-    if (phase === 1 && !canVote) actions += `<p class="muted">Crea l'identità SPID per «${jur}» per votare.</p>`;
   }
 
   const status = me && me.committed
@@ -273,8 +269,17 @@ async function card(addr) {
     <h3>${title}</h3>
     <p class="ref-card__meta">📍 ${jur} · 🗳 ${committed} · ✅ ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
     ${results}
+    ${identity}
     ${actions}
   </article>`;
+}
+
+function enrollForm(addr, jur) {
+  return `<div class="act act--enroll">
+    <span class="act__lbl">🔐 Per votare crea la tua identità SPID per questo referendum</span>
+    <p class="muted">Firmi con SPID (simulato) l'autorizzazione a votare «${jur}». On-chain finisce solo la giurisdizione, nessun dato personale. Vale solo per questo referendum.</p>
+    <button class="btn btn--spid btn--sm" data-enroll="${addr}" data-jur="${jur}">Crea identità SPID</button>
+  </div>`;
 }
 
 function voteForm(addr, options) {
@@ -302,6 +307,14 @@ function revealForm(addr, options) {
 }
 
 function wireCards() {
+  document.querySelectorAll("[data-enroll]").forEach((b) => b.onclick = async () => {
+    if (!S.router) return toast("Connetti il wallet (Sepolia) prima.", "err");
+    const ok = await tx(
+      S.router.simulatedSpidLogin(b.dataset.enroll, b.dataset.jur),
+      "Identità SPID creata per questo referendum — on-chain solo la giurisdizione.",
+    );
+    if (ok) await refresh();
+  });
   document.querySelectorAll("[data-vote]").forEach((f) => f.onsubmit = async (e) => {
     e.preventDefault();
     const addr = f.dataset.vote;

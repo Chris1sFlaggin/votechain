@@ -34,9 +34,9 @@ contract CommitRevealTest is Test {
         ref = Referendum(factory.createReferendum("R", "Italia", opts));
 
         vm.prank(alice);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(ref), "Italia");
         vm.prank(bob);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(ref), "Italia");
     }
 
     function _d(bytes32 v, string memory n) internal pure returns (bytes32) {

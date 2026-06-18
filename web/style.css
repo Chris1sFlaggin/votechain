@@ -163,4 +163,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 .ref-card--err{opacity:.7;border-color:#f0c0c0}
 .ref-card--err .ref-card__meta{color:#b04a4a;word-break:break-all}
 
+/* identità SPID per-referendum (finta) + riquadro creazione identità */
+.ident{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.6rem 0;padding:.55rem .8rem;
+  border:1px solid #cfe0fb;border-radius:12px;background:#eef5ff;color:#0a4ea3;font-size:.85rem;font-weight:600}
+.ident code{font-family:"IBM Plex Mono",monospace;background:#dcebff;padding:.05rem .4rem;border-radius:6px}
+.ident__exp{margin-left:auto;font-weight:600;font-size:.74rem;color:#6a86b5}
+.act--enroll .muted{margin:.4rem 0 .6rem}
+
 .foot{text-align:center;color:var(--mut);font-size:.82rem;padding:2.4rem 1rem 1.6rem}

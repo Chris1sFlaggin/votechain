@@ -31,13 +31,13 @@ contract ReferendumTest is Test {
         vm.prank(govIT);
         ref = Referendum(factory.createReferendum("Referendum Test", "Italia", _opts()));
 
-        // voters self-enrol a (fake) SPID identity for a jurisdiction (no CF on-chain)
+        // voters self-enrol a (fake) SPID identity PER referendum (no CF on-chain)
         vm.prank(alice);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(ref), "Italia");
         vm.prank(bob);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(ref), "Italia");
         vm.prank(sara);
-        router.simulatedSpidLogin("San Marino");
+        router.simulatedSpidLogin(address(ref), "San Marino");
     }
 
     function _opts() internal pure returns (bytes32[] memory a) {
@@ -171,9 +171,29 @@ contract ReferendumTest is Test {
     function test_governmentCannotVote() public {
         // even if the government enrols an SPID identity, it cannot commit a vote
         vm.prank(govIT);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(ref), "Italia");
         vm.prank(govIT);
         vm.expectRevert(Errors.GovernmentCannotVote.selector);
         ref.commit(_digest(SI, "g"));
+    }
+
+    /// One identity per referendum: enrolling for `ref` does NOT authorise another
+    /// referendum, even in the same jurisdiction. You must create a fresh identity.
+    function test_identityIsPerReferendum() public {
+        vm.prank(govIT);
+        Referendum ref2 = Referendum(factory.createReferendum("Referendum 2", "Italia", _opts()));
+
+        // alice is enrolled for `ref` but never for `ref2`
+        vm.prank(alice);
+        vm.expectRevert(Errors.WalletNotAuthorized.selector);
+        ref2.commit(_digest(SI, "x"));
+
+        // a fresh identity for ref2 lets her vote there
+        vm.prank(alice);
+        router.simulatedSpidLogin(address(ref2), "Italia");
+        vm.prank(alice);
+        ref2.commit(_digest(SI, "x"));
+        (, bool committed,,,) = ref2.ballots(alice);
+        assertTrue(committed);
     }
 }

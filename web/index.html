@@ -6,7 +6,7 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -59,22 +59,11 @@
 
       <section id="citizenArea" class="hidden">
         <div class="role-banner role-banner--cit">
-          <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Crea un'identità SPID simulata per poter votare.</span></div>
+          <div><b>🧑‍💻 Cittadino</b><span id="spidStatus">Per votare crea un'identità SPID dedicata dal riquadro di ciascun referendum qui sotto.</span></div>
         </div>
         <section class="card" id="spidCard">
-          <h2>🔐 Accesso SPID <small>(simulato)</small></h2>
-          <p class="muted">PoC: nome, cognome e codice fiscale sono solo dimostrativi — <b>non vanno on-chain, non vengono salvati né mostrati</b>. Sulla blockchain finisce <b>solo la giurisdizione</b> scelta — nessun dato personale, nemmeno uno pseudonimo.</p>
-          <div class="grid2">
-            <label class="field"><span>Nome <em>(non salvato)</em></span><input id="spidNome" placeholder="es. Mario" autocomplete="off"></label>
-            <label class="field"><span>Cognome <em>(non salvato)</em></span><input id="spidCognome" placeholder="es. Rossi" autocomplete="off"></label>
-            <label class="field"><span>Codice fiscale <em>(solo a video, non salvato)</em></span><input id="spidCf" placeholder="es. RSSMRA85M01H501Z" autocomplete="off"></label>
-            <label class="field"><span>Giurisdizione</span><input id="spidJur" list="jurList" value="Italia"></label>
-          </div>
-          <datalist id="jurList"><option>Italia</option><option>San Marino</option></datalist>
-          <div class="row">
-            <button id="spidLogin" class="btn btn--spid btn--xl">Crea identità SPID</button>
-            <button id="spidRandom" class="btn" type="button">🎲 CF casuale</button>
-          </div>
+          <h2>🔐 Identità SPID <small>(simulata)</small></h2>
+          <p class="muted">Per <b>ogni</b> referendum firmi con SPID (simulato) una <b>identità dedicata</b>: vale solo per quel referendum e resta accessibile <b>fino alla chiusura</b>. La stessa identità <b>non</b> permette di votare altri referendum, e <b>senza identità non si può votare</b>. On-chain finisce <b>solo la giurisdizione</b> — nessun dato personale, nemmeno uno pseudonimo. Crea l'identità dal riquadro del referendum che vuoi votare 👇</p>
         </section>
       </section>
 
@@ -110,7 +99,7 @@
     <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
-  <script src="config.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

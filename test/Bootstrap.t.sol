@@ -38,22 +38,29 @@ contract BootstrapTest is Test {
     }
 
     function test_selfEnrollAndGeofencing() public {
-        // anyone can self-enrol a fake SPID identity for a chosen jurisdiction
+        // a referendum is the scope of an identity (one identity per referendum)
+        vm.prank(gov);
+        Referendum r = Referendum(factory.createReferendum("R", "Italia", _twoOpts()));
+
+        // anyone can self-enrol a fake SPID identity for that referendum
         vm.prank(voter);
-        router.simulatedSpidLogin("Italia");
-        assertTrue(router.canVote(voter, "Italia"));
-        assertFalse(router.canVote(voter, "San Marino"));
+        router.simulatedSpidLogin(address(r), "Italia");
+        assertTrue(router.canVote(address(r), voter, "Italia"));
+        assertFalse(router.canVote(address(r), voter, "San Marino"));
+    }
+
+    function _twoOpts() internal pure returns (bytes32[] memory opts) {
+        opts = new bytes32[](2);
+        opts[0] = bytes32("si");
+        opts[1] = bytes32("no");
     }
 
     function test_fullFlowFromBootstrappedSystem() public {
-        bytes32[] memory opts = new bytes32[](2);
-        opts[0] = bytes32("si");
-        opts[1] = bytes32("no");
         vm.prank(gov);
-        Referendum r = Referendum(factory.createReferendum("Ref", "Italia", opts));
+        Referendum r = Referendum(factory.createReferendum("Ref", "Italia", _twoOpts()));
 
         vm.prank(voter);
-        router.simulatedSpidLogin("Italia");
+        router.simulatedSpidLogin(address(r), "Italia");
 
         bytes32 digest = keccak256(abi.encodePacked(bytes32("si"), "n1"));
         vm.prank(voter);

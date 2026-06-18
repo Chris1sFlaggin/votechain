@@ -109,8 +109,9 @@ contract Referendum is IReferendum {
         if (phase != Phase.Voting) revert Errors.VotingNotOpen();
         // separation of powers: a government cannot vote in its own jurisdiction
         if (router.isGovernment(msg.sender, jurisdiction)) revert Errors.GovernmentCannotVote();
-        if (!router.canVote(msg.sender, jurisdiction)) {
-            if (!router.isAuthorized(msg.sender)) revert Errors.WalletNotAuthorized();
+        // identity is per-referendum: must have a (fake) SPID identity for THIS referendum
+        if (!router.canVote(address(this), msg.sender, jurisdiction)) {
+            if (!router.isAuthorized(address(this), msg.sender)) revert Errors.WalletNotAuthorized();
             revert Errors.OutOfJurisdiction();
         }
         if (!VoteVerifier.verifica(usedDigest, d)) revert Errors.NonceGiaUtilizzato();
