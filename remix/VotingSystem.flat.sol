@@ -33,6 +33,7 @@ library Errors {
     error NotCreator();
     error PollNotWon();
     error AlreadyClaimed();
+    error BelowMinVotes(); // il governo può esprimersi solo sui sondaggi che hanno superato il minimo
 }
 
 // src/interfaces/IReferendum.sol
@@ -294,8 +295,10 @@ contract PollHub {
     ///         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).
     ///         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain).
     function endorse(uint256 id, bool approve) external {
-        if (_polls[id].creator == address(0)) revert Errors.BadPoll();
+        Poll storage p = _polls[id];
+        if (p.creator == address(0)) revert Errors.BadPoll();
         if (!router.isAuthority(msg.sender)) revert Errors.NotGovernment();
+        if (p.totalVotes < MIN_VOTES) revert Errors.BelowMinVotes(); // solo sondaggi oltre il minimo
         _gov[id] = Gov(true, approve, msg.sender);
         emit Endorsed(id, msg.sender, approve);
     }

@@ -31,4 +31,5 @@ library Errors {
     error NotCreator();
     error PollNotWon();
     error AlreadyClaimed();
+    error BelowMinVotes(); // il governo può esprimersi solo sui sondaggi che hanno superato il minimo
 }

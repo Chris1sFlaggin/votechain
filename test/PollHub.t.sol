@@ -30,9 +30,19 @@ contract PollHubTest is Test {
         hub.endorse(id, true);
     }
 
+    function test_endorseBelowMinReverts() public {
+        vm.prank(creator);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        _voteN(id, SI, 4, 1); // 4 < MIN_VOTES(5)
+        vm.prank(gov);
+        vm.expectRevert(Errors.BelowMinVotes.selector);
+        hub.endorse(id, true);
+    }
+
     function test_governmentEndorsement() public {
         vm.prank(creator);
         uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        _voteN(id, SI, 5, 1); // supera il minimo
         vm.prank(gov);
         hub.endorse(id, true);
         (bool set, bool approve, address by) = hub.endorsement(id);

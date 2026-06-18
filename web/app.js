@@ -566,11 +566,11 @@ async function renderGovDeck() {
   GOV_DECK = [];
   for (let id = 0; id < n; id++) {
     const p = await S.pollHub.getPoll(id).catch(() => null);
-    if (p && Number(p.totalVotes) >= MIN_VOTES) {
-      const counts = (await Promise.all(p.options.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
-      const end = await S.pollHub.endorsement(id).catch(() => null);
-      GOV_DECK.push({ id, p, counts, end });
-    }
+    if (!p || Number(p.totalVotes) < MIN_VOTES) continue; // solo oltre il minimo (hardcoded 5)
+    const end = await S.pollHub.endorsement(id).catch(() => null);
+    if (end && end[0]) continue; // già approvato/disapprovato → non si mostra più
+    const counts = (await Promise.all(p.options.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
+    GOV_DECK.push({ id, p, counts, end });
   }
   GOV_I = 0;
   if (!GOV_DECK.length) {
