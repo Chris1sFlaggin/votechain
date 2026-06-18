@@ -6,7 +6,7 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -71,6 +71,15 @@
         <h2 class="section-title">Referendum on-chain</h2>
         <div id="referenda" class="ref-grid"></div>
       </section>
+
+      <section id="chainExplorer" class="hidden chain-explorer">
+        <div class="chain-explorer__head">
+          <h2 class="section-title">🔗 Esplora la blockchain <small>in tempo reale</small></h2>
+          <span class="chain-live"><span class="chain-live__dot"></span><span id="chainHead">in ascolto della rete…</span></span>
+        </div>
+        <p class="muted">Ogni azione (identità, voto, spoglio, sondaggio) è una <b>transazione</b> registrata per sempre su Sepolia. Passa il mouse — o tocca — su un evento per capire <b>cosa significa</b> e <b>quali dati restano davvero on-chain</b>.</p>
+        <div id="chainFeed" class="chain-feed"></div>
+      </section>
     </div>
 
     <!-- ============================================================ SOCIAL -->
@@ -99,7 +108,7 @@
     <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
-  <script src="config.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="config.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

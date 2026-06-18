@@ -105,6 +105,7 @@ async function connect() {
   const okAddr = await resolveAddresses();
   if (!okAddr || !initContracts()) { toast("Sistema non configurato per questa rete (config.js).", "err"); return; }
   await refresh();
+  startExplorer().catch(() => {}); // esplora-chain live (non blocca il resto)
   if (!$("socialView").classList.contains("hidden")) await renderPolls();
 }
 $("connect").onclick = connect;
@@ -158,6 +159,7 @@ function renderIdentity() {
 function gateAreas() {
   $("landing").classList.add("hidden");
   $("voteSection").classList.remove("hidden");
+  $("chainExplorer").classList.remove("hidden");
   if (IS_GOV) {
     $("govArea").classList.remove("hidden");
     $("citizenArea").classList.add("hidden");
@@ -353,8 +355,172 @@ function updateJurList() {
   if (dl) dl.innerHTML = [...seenJur].map((j) => `<option>${j}</option>`).join("");
 }
 
-// =================================================================== SOCIAL
+// ============================================================ ESPLORA CHAIN (live)
+// Ascolta gli eventi dei NOSTRI contratti su Sepolia e li traduce in linguaggio umano:
+// cosa è successo, quali dati restano davvero on-chain, perché. Dà l'idea della blockchain.
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const EXPLORER_IFACE = new ethers.Interface([
+  "event GovernmentRegistered(address indexed government, string jurisdiction)",
+  "event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction)",
+  "event ReferendumCreated(address indexed referendum, address indexed government, string jurisdiction, string title)",
+  "event Committed(address indexed voter, bytes32 digest, uint32 revision)",
+  "event Revealed(address indexed voter, bytes32 vote, string nonce, bool matches)",
+  "event PhaseChanged(uint8 phase)",
+  "event Finalized(uint256 valid, uint256 nullified)",
+  "event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake)",
+  "event Voted(uint256 indexed id, address indexed voter, bytes32 option, uint64 totalVotes)",
+  "event PollWon(uint256 indexed id)",
+  "event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount)",
+]);
+const PHASE_NAME = ["Configurazione", "Votazione", "Spoglio", "Chiuso"];
+const shortA = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");
+const shortH = (h) => (h ? `${h.slice(0, 10)}…` : "—");
+
+// nome evento -> come raccontarlo a un umano
+const EVT_META = {
+  ReferendumCreated: {
+    ico: "📜", kind: "create", title: "Referendum emanato",
+    sum: (a) => `«${a.title}» · ${a.jurisdiction}`,
+    why: "Il governo ha pubblicato un nuovo contratto-referendum: da ora esiste in modo permanente e chiunque può verificarne regole ed esiti. Nessuno può cancellarlo.",
+    data: (a) => [["Contratto", shortA(a.referendum)], ["Governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction], ["Titolo", a.title]],
+  },
+  WalletAuthorized: {
+    ico: "🪪", kind: "id", title: "Identità SPID creata",
+    sum: (a) => `un cittadino si è autorizzato a votare (${a.jurisdiction})`,
+    why: "Un cittadino ha firmato la sua identità SPID (simulata) per UN referendum. On-chain finisce solo la giurisdizione: niente nome, niente codice fiscale, nemmeno uno pseudonimo.",
+    data: (a) => [["Per il referendum", shortA(a.referendum)], ["Wallet cittadino", shortA(a.wallet)], ["Giurisdizione", a.jurisdiction]],
+  },
+  GovernmentRegistered: {
+    ico: "🏛", kind: "gov", title: "Governo registrato",
+    sum: (a) => `autorità abilitata per ${a.jurisdiction}`,
+    why: "Un indirizzo diventa autorità elettorale per una giurisdizione: solo lui potrà emanare referendum lì. È il controllo degli accessi scritto in chiaro nella catena.",
+    data: (a) => [["Wallet governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction]],
+  },
+  Committed: {
+    ico: "🗳️", kind: "commit", title: "Voto segreto (commit)",
+    sum: (a) => `impronta del voto depositata · revisione ${a.revision}`,
+    why: "Il cuore del voto segreto: viene salvato solo keccak256(voto, nonce), un'impronta che NON rivela la scelta. Il voto è già registrato e immutabile, ma resta nascosto fino allo spoglio.",
+    data: (a) => [["Elettore", shortA(a.voter)], ["Impronta (hash)", shortH(a.digest)], ["Revisione", String(a.revision)]],
+  },
+  Revealed: {
+    ico: "🔓", kind: "reveal", title: "Voto rivelato (spoglio)",
+    sum: (a) => `${decodeOpt(a.vote)} — ${a.matches ? "valido ✓" : "hash non combacia ✗"}`,
+    why: "Durante lo spoglio l'elettore svela voto + nonce in chiaro. Chiunque può ricalcolare l'hash e verificare che combaci con quello depositato prima: il conteggio è verificabile da tutti.",
+    data: (a) => [["Elettore", shortA(a.voter)], ["Voto in chiaro", decodeOpt(a.vote)], ["Nonce", a.nonce], ["Hash combacia?", a.matches ? "sì" : "no"]],
+  },
+  PhaseChanged: {
+    ico: "⏱️", kind: "phase", title: "Cambio fase",
+    sum: (a) => `→ ${PHASE_NAME[Number(a.phase)] ?? a.phase}`,
+    why: "Il governo fa avanzare il ciclo di vita del referendum (Votazione → Spoglio → Chiuso). Ogni passaggio è una transazione tracciata: la sequenza non può essere falsificata.",
+    data: (a) => [["Nuova fase", PHASE_NAME[Number(a.phase)] ?? String(a.phase)]],
+  },
+  Finalized: {
+    ico: "✅", kind: "final", title: "Spoglio concluso",
+    sum: (a) => `${a.valid} voti validi · ${a.nullified} nulli`,
+    why: "Il referendum è chiuso: il conteggio ufficiale è stato calcolato dal contratto stesso e non è più modificabile. Gli esiti diventano pubblici e definitivi.",
+    data: (a) => [["Voti validi", String(a.valid)], ["Voti nulli", String(a.nullified)]],
+  },
+  PollCreated: {
+    ico: "💬", kind: "poll", title: "Sondaggio creato",
+    sum: (a) => `«${a.question}» · cauzione ${ethers.formatEther(a.stake)}Ξ`,
+    why: "Sondaggio social aperto a tutti: il creatore blocca una piccola cauzione (anti-spam) che riprende se il sondaggio raggiunge significatività statistica. I fondi sono custoditi dal contratto, non da una persona.",
+    data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Domanda", a.question], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`]],
+  },
+  Voted: {
+    ico: "✋", kind: "pollvote", title: "Voto sondaggio",
+    sum: (a) => `${decodeOpt(a.option)} · totale ${a.totalVotes}`,
+    why: "Voto pubblico (non segreto) in un sondaggio social. Ogni indirizzo può votare una sola volta: è il contratto a impedire i doppioni, senza bisogno di un'autorità centrale.",
+    data: (a) => [["Sondaggio", String(a.id)], ["Votante", shortA(a.voter)], ["Opzione", decodeOpt(a.option)], ["Voti totali", String(a.totalVotes)]],
+  },
+  PollWon: {
+    ico: "🏆", kind: "won", title: "Sondaggio vinto",
+    sum: () => "risultato statisticamente significativo",
+    why: "Il distacco fra le opzioni è abbastanza ampio da essere significativo (≈95%): il sondaggio è «vinto» e la cauzione diventa riscattabile.",
+    data: (a) => [["Sondaggio", String(a.id)]],
+  },
+  StakeClaimed: {
+    ico: "💸", kind: "claim", title: "Cauzione riscattata",
+    sum: (a) => `${ethers.formatEther(a.amount)}Ξ restituiti al creatore`,
+    why: "Il creatore riprende la cauzione dopo la vittoria del sondaggio: un trasferimento di ETH eseguito e tracciato dal contratto, verificabile da chiunque.",
+    data: (a) => [["Sondaggio", String(a.id)], ["Creatore", shortA(a.creator)], ["Importo", `${ethers.formatEther(a.amount)} ETH`]],
+  },
+};
+
+let EXPLORER_ON = false;
+let chainWatch = []; // indirizzi dei nostri contratti da filtrare
+const chainSeen = new Set(); // dedupe per txHash:logIndex
+let chainItems = []; // eventi decodificati recenti (cap)
+
+async function startExplorer() {
+  if (!S.provider) return;
+  chainWatch = [ADDR.router, ADDR.factory, ADDR.pollHub].filter((a) => ethers.isAddress(a));
+  try { chainWatch.push(...(await S.factory.getReferenda())); } catch {}
+  const head = await S.provider.getBlockNumber();
+  // backfill resiliente: alcuni RPC limitano il range, riprovo via via più corto
+  for (const span of [4000, 800, 100, 0]) {
+    try { await pullLogs(Math.max(0, head - span), head); break; } catch {}
+  }
+  if (!EXPLORER_ON) {
+    EXPLORER_ON = true;
+    S.provider.on("block", (bn) => { pullLogs(bn, bn).catch(() => {}); });
+  }
+  renderExplorer();
+}
+
+async function pullLogs(fromBlock, toBlock) {
+  if (!chainWatch.length) return;
+  const logs = await S.provider.getLogs({ address: chainWatch, fromBlock, toBlock });
+  let added = false, refsChanged = false;
+  for (const lg of logs) {
+    const key = `${lg.transactionHash}:${lg.index}`;
+    if (chainSeen.has(key)) continue;
+    let parsed;
+    try { parsed = EXPLORER_IFACE.parseLog({ topics: [...lg.topics], data: lg.data }); } catch { parsed = null; }
+    if (!parsed || !EVT_META[parsed.name]) continue;
+    chainSeen.add(key);
+    chainItems.unshift({ block: lg.blockNumber, hash: lg.transactionHash, name: parsed.name, args: parsed.args });
+    added = true;
+    if (parsed.name === "ReferendumCreated") refsChanged = true;
+  }
+  if (refsChanged) {
+    try { for (const r of await S.factory.getReferenda()) if (!chainWatch.includes(r)) chainWatch.push(r); } catch {}
+  }
+  if (added) { chainItems = chainItems.slice(0, 40); renderExplorer(); }
+}
+
+function evtCard(it) {
+  const m = EVT_META[it.name];
+  const rows = m.data(it.args)
+    .map(([k, v]) => `<div class="evt__kv"><span>${k}</span><b>${escapeHtml(String(v))}</b></div>`).join("");
+  return `<article class="evt evt--${m.kind}" tabindex="0">
+    <div class="evt__row"><span class="evt__ico">${m.ico}</span><span class="evt__title">${m.title}</span><span class="evt__blk">blocco #${it.block}</span></div>
+    <div class="evt__sum">${escapeHtml(m.sum(it.args))}</div>
+    <div class="evt__explain">
+      <p class="evt__why">${m.why}</p>
+      <div class="evt__data">${rows}</div>
+      <a class="evt__link" href="https://sepolia.etherscan.io/tx/${it.hash}" target="_blank" rel="noopener">tx ${shortH(it.hash)} su Etherscan ↗</a>
+    </div>
+  </article>`;
+}
+
+function renderExplorer() {
+  const box = $("chainFeed");
+  if (!box) return;
+  const head = $("chainHead");
+  if (head) head.textContent = chainItems.length ? `in ascolto · ${chainItems.length} eventi recenti` : "in ascolto della rete…";
+  if (!chainItems.length) {
+    box.innerHTML = `<div class="evt-empty">Nessun evento ancora. Appena qualcuno crea un'identità, vota, o il governo emana/chiude un referendum, comparirà qui in tempo reale. 🔭</div>`;
+    return;
+  }
+  box.innerHTML = chainItems.map(evtCard).join("");
+  // tap-to-toggle per chi non ha l'hover (mobile)
+  box.querySelectorAll(".evt").forEach((el) => {
+    el.onclick = (e) => { if (e.target.closest(".evt__link")) return; el.classList.toggle("evt--open"); };
+  });
+}
+
+// =================================================================== SOCIAL
 
 function showView(which) {
   const social = which === "social";
