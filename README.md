@@ -38,10 +38,11 @@ remix/
 
 ## Ciclo di vita (in `Referendum.sol`)
 
-- **Fase 1 — Voting**: solo `commit(digest)` con `digest = keccak256(voto, nonce)`.
-  `verifica()` rifiuta un digest già presente nel dominio del referendum →
-  ogni nonce è univoco. Rivoto consentito (nuovo nonce), conta solo l'ultimo.
-  **Nessun reveal qui**: prima dello spoglio non esiste alcun conteggio.
+- **Fase 1 — Voting**: solo `commit(digest, nonceTag)` con `digest = keccak256(voto,
+  nonce)` (nasconde il voto) e `nonceTag = keccak256(nonce)` (impegno sul solo nonce).
+  `verifica()` rifiuta un `nonceTag` già presente → **ogni nonce è univoco, e un nonce
+  riusato dà errore anche con un voto diverso**. Rivoto consentito (nonce nuovo), conta
+  solo l'ultimo. **Nessun reveal qui**: prima dello spoglio non esiste alcun conteggio.
 - **Fase 2 — Tally (spoglio)**: niente nuovi digest; **si apre il `reveal`**.
 - **`reveal(voto, nonce)`** (solo Fase 2): pubblica il voto **in chiaro in ogni
   caso**; vale l'ultimo reveal; il flag `matches` è solo per la UX.
@@ -81,7 +82,7 @@ SPID reale è off-chain (IdP accreditato): non gira in una pagina statica. Qui �
 # build
 forge build
 
-# test (29 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
+# test (30 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
 forge test -vv
 
 # deploy locale
@@ -130,9 +131,10 @@ Le chiamate che il frontend fa ai contratti (identiche all'e2e provato con
 
 ```js
 await router.simulatedSpidLogin(referendum.target, "Italia"); // identità per QUESTO referendum
-const vote   = ethers.encodeBytes32String("si");
-const digest = ethers.solidityPackedKeccak256(["bytes32","string"], [vote, "tramonto-42"]);
-await referendum.commit(digest);             // Fase 1 (commit)
+const vote     = ethers.encodeBytes32String("si");
+const digest   = ethers.solidityPackedKeccak256(["bytes32","string"], [vote, "tramonto-42"]);
+const nonceTag = ethers.solidityPackedKeccak256(["string"], ["tramonto-42"]); // impegno sul nonce
+await referendum.commit(digest, nonceTag);   // Fase 1 (commit; nonce riusato = errore, anche con voto diverso)
 await referendum.setPhase(2);                // governo: apre lo spoglio
 await referendum.reveal(vote, "tramonto-42");// Fase 2 (reveal solo qui)
 await referendum.close();                    // governo: conteggio ufficiale
@@ -162,7 +164,7 @@ Senza installare nulla, su <https://remix.ethereum.org>:
    **dedicata a quel referendum**, nessun dato personale on-chain), poi `commit`
    (Fase 1) e, dopo che il governo apre lo spoglio, `reveal` (Fase 2) sul `Referendum`.
 
-I 29 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
+I 30 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
 
 ## Deploy su GitHub Pages
 
@@ -192,7 +194,7 @@ Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
 | Niente voto senza identità creata | `Referendum.commit` → `WalletNotAuthorized` se manca l'identità per quel referendum |
 | Identità accessibile fino alla scadenza (chiusura) | UI: pseudonimo mostrato finché `phase != Closed` |
 | `digest = keccak256(voto, nonce)` | `VoteVerifier.digest` |
-| `verifica()` unicità del digest | `VoteVerifier.verifica` + `usedDigest` in `Referendum.commit` |
+| `verifica()` unicità del **nonce** (errore anche con voto diverso) | `VoteVerifier.verifica` su `nonceTag=keccak(nonce)` + `usedNonce` in `Referendum.commit` |
 | Rivoto con nonce nuovo, vale l'ultimo | `Referendum.commit` (lastDigest) |
 | Reveal in chiaro in ogni caso, **solo Fase 2 (spoglio)**, multi-reveal | `Referendum.reveal` (gate su `Phase.Tally`) |
 | Conteggio differito alla chiusura | `Referendum.close` |

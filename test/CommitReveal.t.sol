@@ -43,38 +43,52 @@ contract CommitRevealTest is Test {
         return keccak256(abi.encodePacked(v, n));
     }
 
+    function _nt(string memory n) internal pure returns (bytes32) {
+        return keccak256(bytes(n)); // impegno sul nonce, indipendente dal voto
+    }
+
     /// The digest excludes the voter, so identical (vote,nonce) from two voters collide.
     function test_sameVoteNonceCollides() public {
         bytes32 d = _d(SI, "dup");
         vm.prank(alice);
-        ref.commit(d);
+        ref.commit(d, _nt("dup"));
         vm.prank(bob);
         vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
-        ref.commit(d);
+        ref.commit(d, _nt("dup"));
     }
 
     /// Re-voting with the same nonce is rejected (must pick a fresh nonce).
     function test_reusedNonceBySameVoterRejected() public {
         vm.startPrank(alice);
-        ref.commit(_d(SI, "n"));
+        ref.commit(_d(SI, "n"), _nt("n"));
         vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
-        ref.commit(_d(SI, "n")); // same digest
+        ref.commit(_d(SI, "n"), _nt("n")); // same digest
         vm.stopPrank();
     }
 
-    /// Different option but reused nonce -> different digest -> allowed.
+    /// Re-voting is allowed only with a FRESH nonce (new nonce tag).
     function test_freshNonceAllowsRevote() public {
         vm.startPrank(alice);
-        ref.commit(_d(SI, "n"));
-        ref.commit(_d(NO, "m")); // fresh
+        ref.commit(_d(SI, "n"), _nt("n"));
+        ref.commit(_d(NO, "m"), _nt("m")); // fresh nonce
         vm.stopPrank();
         assertEq(ref.revisions(alice), 2);
+    }
+
+    /// Uniqueness is on the NONCE, not on (vote,nonce): the same nonce reused with a
+    /// DIFFERENT vote must also be rejected (digest diverso ma stesso nonce).
+    function test_sameNonceDifferentVoteRejected() public {
+        vm.startPrank(alice);
+        ref.commit(_d(SI, "shared"), _nt("shared"));
+        vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
+        ref.commit(_d(NO, "shared"), _nt("shared")); // voto diverso, stesso nonce
+        vm.stopPrank();
     }
 
     /// The last reveal wins, even after an earlier mismatching reveal.
     function test_multiRevealLastWins() public {
         vm.prank(alice);
-        ref.commit(_d(NO, "secret"));
+        ref.commit(_d(NO, "secret"), _nt("secret"));
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(alice); // mismatch, recorded in clear

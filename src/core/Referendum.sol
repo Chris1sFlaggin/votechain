@@ -40,7 +40,7 @@ contract Referendum is IReferendum {
     }
     mapping(address => Ballot) public ballots; // wallet k_i => ballot
     mapping(address => uint32) public revisions; // wallet k_i => (re)cast count
-    mapping(bytes32 => bool) public usedDigest; // digest domain (verifica uniqueness)
+    mapping(bytes32 => bool) public usedNonce; // nonce domain: keccak(nonce) => used (verifica uniqueness)
     address[] public voters; // participating wallets, for the tally
 
     uint256 public committedCount;
@@ -105,7 +105,11 @@ contract Referendum is IReferendum {
 
     // -------------------------------------------------------------------- voter
     /// @notice PHASE 1: publish a hiding digest of your vote (geofenced + unique).
-    function commit(bytes32 d) external override {
+    /// @param d        keccak256(vote, nonce) — hides the vote until reveal.
+    /// @param nonceTag keccak256(nonce) — vote-independent nonce commitment. Uniqueness
+    ///                 is checked on this, so a reused nonce is rejected with the same
+    ///                 OR a different vote. The frontend computes both client-side.
+    function commit(bytes32 d, bytes32 nonceTag) external override {
         if (phase != Phase.Voting) revert Errors.VotingNotOpen();
         // separation of powers: a government cannot vote in its own jurisdiction
         if (router.isGovernment(msg.sender, jurisdiction)) revert Errors.GovernmentCannotVote();
@@ -114,8 +118,8 @@ contract Referendum is IReferendum {
             if (!router.isAuthorized(address(this), msg.sender)) revert Errors.WalletNotAuthorized();
             revert Errors.OutOfJurisdiction();
         }
-        if (!VoteVerifier.verifica(usedDigest, d)) revert Errors.NonceGiaUtilizzato();
-        usedDigest[d] = true;
+        if (!VoteVerifier.verifica(usedNonce, nonceTag)) revert Errors.NonceGiaUtilizzato();
+        usedNonce[nonceTag] = true;
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) {
             b.committed = true;

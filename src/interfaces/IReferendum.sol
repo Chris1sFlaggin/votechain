@@ -23,8 +23,8 @@ interface IReferendum {
     function result(bytes32 option) external view returns (uint256);
 
     // voter actions (PHASE 1 / 2)
-    function commit(bytes32 digest) external; // PHASE 1
-    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 1 or 2
+    function commit(bytes32 digest, bytes32 nonceTag) external; // PHASE 1
+    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 2
 
     // government actions
     function setPhase(Phase p) external; // Setup/Voting/Tally

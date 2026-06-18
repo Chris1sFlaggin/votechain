@@ -63,8 +63,9 @@ contract BootstrapTest is Test {
         router.simulatedSpidLogin(address(r), "Italia");
 
         bytes32 digest = keccak256(abi.encodePacked(bytes32("si"), "n1"));
+        bytes32 nonceTag = keccak256(bytes("n1"));
         vm.prank(voter);
-        r.commit(digest);
+        r.commit(digest, nonceTag);
         vm.prank(gov);
         r.setPhase(IReferendum.Phase.Tally);
         vm.prank(voter);

@@ -58,8 +58,8 @@ interface IReferendum {
     function result(bytes32 option) external view returns (uint256);
 
     // voter actions (PHASE 1 / 2)
-    function commit(bytes32 digest) external; // PHASE 1
-    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 1 or 2
+    function commit(bytes32 digest, bytes32 nonceTag) external; // PHASE 1
+    function reveal(bytes32 vote, string calldata nonce) external; // PHASE 2
 
     // government actions
     function setPhase(Phase p) external; // Setup/Voting/Tally
@@ -68,14 +68,24 @@ interface IReferendum {
 
 // src/crypto/VoteVerifier.sol
 
-/// @title VoteVerifier — the cryptographic core: digest + verifica()
+/// @title VoteVerifier — the cryptographic core: digest + nonce tag + verifica()
 /// @notice The on-chain digest of a vote is keccak256(abi.encodePacked(vote, nonce))
 ///         (the spec's `Keccak256(voto + nonce)`). The vote is a bytes32 option id,
-///         the nonce is the voter's secret string.
+///         the nonce is the voter's secret string. Nonce uniqueness is enforced on a
+///         separate, VOTE-INDEPENDENT commitment `nonceTag = keccak256(nonce)`, so a
+///         reused nonce is rejected regardless of the chosen vote, while the digest
+///         keeps the vote hidden until reveal.
 library VoteVerifier {
-    /// @notice digest = keccak256(voto + nonce).
+    /// @notice digest = keccak256(voto + nonce). Hides the vote until reveal.
     function digest(bytes32 vote, string memory nonce) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(vote, nonce));
+    }
+
+    /// @notice nonceTag = keccak256(nonce): a commitment to the nonce alone, used to
+    ///         detect a reused nonce WITHOUT knowing the vote (so "same nonce, any
+    ///         vote" collides). Does not reveal the vote.
+    function nonceTag(string memory nonce) internal pure returns (bytes32) {
+        return keccak256(bytes(nonce));
     }
 
     /// @notice Does (vote, nonce) hash to the stored digest? (reveal / tally check)
@@ -83,11 +93,12 @@ library VoteVerifier {
         return digest(vote, nonce) == stored;
     }
 
-    /// @notice verifica(): is `d` still free in this referendum's digest domain?
-    /// @dev Returns true when the digest is NEW (not yet used), i.e. the uniqueness
-    ///      check passes. Operates directly on the contract's used-digest set.
-    function verifica(mapping(bytes32 => bool) storage used, bytes32 d) internal view returns (bool) {
-        return !used[d];
+    /// @notice verifica(): is `tag` still free in this referendum's nonce domain?
+    /// @dev Returns true when the nonce tag is NEW (not yet used), i.e. the uniqueness
+    ///      check passes. Operates directly on the contract's used-nonce set, so the
+    ///      same nonce can never be committed twice — with the same OR a different vote.
+    function verifica(mapping(bytes32 => bool) storage used, bytes32 tag) internal view returns (bool) {
+        return !used[tag];
     }
 }
 
@@ -398,7 +409,7 @@ contract Referendum is IReferendum {
     }
     mapping(address => Ballot) public ballots; // wallet k_i => ballot
     mapping(address => uint32) public revisions; // wallet k_i => (re)cast count
-    mapping(bytes32 => bool) public usedDigest; // digest domain (verifica uniqueness)
+    mapping(bytes32 => bool) public usedNonce; // nonce domain: keccak(nonce) => used (verifica uniqueness)
     address[] public voters; // participating wallets, for the tally
 
     uint256 public committedCount;
@@ -463,7 +474,11 @@ contract Referendum is IReferendum {
 
     // -------------------------------------------------------------------- voter
     /// @notice PHASE 1: publish a hiding digest of your vote (geofenced + unique).
-    function commit(bytes32 d) external override {
+    /// @param d        keccak256(vote, nonce) — hides the vote until reveal.
+    /// @param nonceTag keccak256(nonce) — vote-independent nonce commitment. Uniqueness
+    ///                 is checked on this, so a reused nonce is rejected with the same
+    ///                 OR a different vote. The frontend computes both client-side.
+    function commit(bytes32 d, bytes32 nonceTag) external override {
         if (phase != Phase.Voting) revert Errors.VotingNotOpen();
         // separation of powers: a government cannot vote in its own jurisdiction
         if (router.isGovernment(msg.sender, jurisdiction)) revert Errors.GovernmentCannotVote();
@@ -472,8 +487,8 @@ contract Referendum is IReferendum {
             if (!router.isAuthorized(address(this), msg.sender)) revert Errors.WalletNotAuthorized();
             revert Errors.OutOfJurisdiction();
         }
-        if (!VoteVerifier.verifica(usedDigest, d)) revert Errors.NonceGiaUtilizzato();
-        usedDigest[d] = true;
+        if (!VoteVerifier.verifica(usedNonce, nonceTag)) revert Errors.NonceGiaUtilizzato();
+        usedNonce[nonceTag] = true;
         Ballot storage b = ballots[msg.sender];
         if (!b.committed) {
             b.committed = true;

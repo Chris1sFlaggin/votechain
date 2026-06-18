@@ -29,9 +29,9 @@ const REF_ABI = [
   "function result(bytes32) view returns (uint256)",
   "function committedCount() view returns (uint256)",
   "function revealedCount() view returns (uint256)",
-  "function usedDigest(bytes32) view returns (bool)",
+  "function usedNonce(bytes32) view returns (bool)",
   "function ballots(address) view returns (bytes32 lastDigest, bool committed, bool revealed, bytes32 lastVote, string lastNonce)",
-  "function commit(bytes32)",
+  "function commit(bytes32, bytes32)",
   "function reveal(bytes32, string)",
   "function setPhase(uint8)",
   "function close()",
@@ -58,6 +58,9 @@ const labelOf = (id) => LABELS[id] || id;
 const decodeOpt = (b) => { try { return ethers.decodeBytes32String(b); } catch { return String(b); } };
 const digestOf = (voteId, nonce) =>
   ethers.solidityPackedKeccak256(["bytes32", "string"], [ethers.encodeBytes32String(voteId), nonce]);
+// impegno sul nonce, indipendente dal voto: l'unicità è su questo → nonce riusato = errore
+// qualunque sia il voto (mentre il digest tiene nascosto il voto fino al reveal).
+const nonceTagOf = (nonce) => ethers.solidityPackedKeccak256(["string"], [nonce]);
 // pseudonimo per-referendum: identità "finta" mostrata a video, derivata da (wallet, referendum).
 // Non è on-chain (on-chain c'è solo la giurisdizione); serve solo a far vedere all'utente la sua identità.
 const pseudoId = (wallet, ref) =>
@@ -325,8 +328,9 @@ function wireCards() {
     if (n1 !== n2) return toast("I due nonce non coincidono.", "err");
     const c = new ethers.Contract(addr, REF_ABI, S.signer);
     const d = digestOf(opt, n1);
-    if (await c.usedDigest(d)) return toast("Nonce già usato in questo referendum: scegline un altro.", "err");
-    if (await tx(c.commit(d), "Voto registrato sulla blockchain.")) await refresh();
+    const nt = nonceTagOf(n1);
+    if (await c.usedNonce(nt)) return toast("Nonce già usato in questo referendum (con qualsiasi voto): scegline un altro.", "err");
+    if (await tx(c.commit(d, nt), "Voto registrato sulla blockchain.")) await refresh();
   });
   document.querySelectorAll("[data-reveal]").forEach((f) => f.onsubmit = async (e) => {
     e.preventDefault();

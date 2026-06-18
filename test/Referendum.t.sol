@@ -51,16 +51,20 @@ contract ReferendumTest is Test {
         return keccak256(abi.encodePacked(v, n));
     }
 
+    function _nt(string memory n) internal pure returns (bytes32) {
+        return keccak256(bytes(n)); // impegno sul nonce, indipendente dal voto
+    }
+
     function test_geofencing_outOfJurisdictionReverts() public {
         vm.prank(sara);
         vm.expectRevert(Errors.OutOfJurisdiction.selector);
-        ref.commit(_digest(SI, "x"));
+        ref.commit(_digest(SI, "x"), _nt("x"));
     }
 
     function test_unauthorizedWalletReverts() public {
         vm.prank(makeAddr("stranger"));
         vm.expectRevert(Errors.WalletNotAuthorized.selector);
-        ref.commit(_digest(SI, "x"));
+        ref.commit(_digest(SI, "x"), _nt("x"));
     }
 
     function test_commitOnlyDuringVoting() public {
@@ -68,13 +72,13 @@ contract ReferendumTest is Test {
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(alice);
         vm.expectRevert(Errors.VotingNotOpen.selector);
-        ref.commit(_digest(SI, "x"));
+        ref.commit(_digest(SI, "x"), _nt("x"));
     }
 
     function test_revoteOnlyLastCounts() public {
         vm.startPrank(alice);
-        ref.commit(_digest(SI, "n1"));
-        ref.commit(_digest(NO, "n2"));
+        ref.commit(_digest(SI, "n1"), _nt("n1"));
+        ref.commit(_digest(NO, "n2"), _nt("n2"));
         vm.stopPrank();
         (bytes32 last,,,,) = ref.ballots(alice);
         assertEq(last, _digest(NO, "n2"));
@@ -85,7 +89,7 @@ contract ReferendumTest is Test {
     /// before the spoglio (presidential-style secrecy).
     function test_revealBlockedDuringVoting() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "an"));
+        ref.commit(_digest(SI, "an"), _nt("an"));
         vm.prank(alice);
         vm.expectRevert(Errors.RevealClosed.selector);
         ref.reveal(SI, "an");
@@ -94,9 +98,9 @@ contract ReferendumTest is Test {
     /// Reveals happen only in Tally; last reveal per wallet wins; count at close.
     function test_tallyCountAfterReveal() public {
         vm.prank(alice);
-        ref.commit(_digest(NO, "an"));
+        ref.commit(_digest(NO, "an"), _nt("an"));
         vm.prank(bob);
-        ref.commit(_digest(SI, "bn"));
+        ref.commit(_digest(SI, "bn"), _nt("bn"));
 
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
@@ -118,7 +122,7 @@ contract ReferendumTest is Test {
 
     function test_wrongNonceNotCounted() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "good"));
+        ref.commit(_digest(SI, "good"), _nt("good"));
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(alice);
@@ -130,7 +134,7 @@ contract ReferendumTest is Test {
 
     function test_unrevealedIsNull() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "k")); // committed, never revealed
+        ref.commit(_digest(SI, "k"), _nt("k")); // committed, never revealed
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(govIT);
@@ -158,7 +162,7 @@ contract ReferendumTest is Test {
 
     function test_revealBlockedAfterClose() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "z"));
+        ref.commit(_digest(SI, "z"), _nt("z"));
         vm.prank(govIT);
         ref.setPhase(IReferendum.Phase.Tally);
         vm.prank(govIT);
@@ -174,7 +178,7 @@ contract ReferendumTest is Test {
         router.simulatedSpidLogin(address(ref), "Italia");
         vm.prank(govIT);
         vm.expectRevert(Errors.GovernmentCannotVote.selector);
-        ref.commit(_digest(SI, "g"));
+        ref.commit(_digest(SI, "g"), _nt("g"));
     }
 
     /// One identity per referendum: enrolling for `ref` does NOT authorise another
@@ -186,13 +190,13 @@ contract ReferendumTest is Test {
         // alice is enrolled for `ref` but never for `ref2`
         vm.prank(alice);
         vm.expectRevert(Errors.WalletNotAuthorized.selector);
-        ref2.commit(_digest(SI, "x"));
+        ref2.commit(_digest(SI, "x"), _nt("x"));
 
         // a fresh identity for ref2 lets her vote there
         vm.prank(alice);
         router.simulatedSpidLogin(address(ref2), "Italia");
         vm.prank(alice);
-        ref2.commit(_digest(SI, "x"));
+        ref2.commit(_digest(SI, "x"), _nt("x"));
         (, bool committed,,,) = ref2.ballots(alice);
         assertTrue(committed);
     }
