@@ -535,6 +535,9 @@ function renderExplorer() {
   box.querySelectorAll(".block").forEach((el) => {
     el.onclick = (e) => { if (e.target.closest(".evt__link")) return; el.classList.toggle("evt--open"); };
   });
+  // default: mostra il blocco più recente (estrema destra)
+  const railEl = box.querySelector(".chain-rail");
+  if (railEl) requestAnimationFrame(() => { railEl.scrollLeft = railEl.scrollWidth; });
 }
 
 // =================================================================== SOCIAL
