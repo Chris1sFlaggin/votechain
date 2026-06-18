@@ -2,7 +2,7 @@
 // SystemBootstrap deployato via Remix; Router/Factory/PollHub ricavati da addresses().
 const CONFIG = {
   chainId: 11155111, // Sepolia: il sito chiede a MetaMask di passare a questa rete
-  bootstrap: "0x92A0b6Ad0c6bf05fd6447dFBb972Bd9F6133E2DD", // SystemBootstrap su Sepolia
+  bootstrap: "0xe0eC9512aa00039668D7593B5C144DF7a0161991", // SystemBootstrap su Sepolia
   router: "",
   factory: "",
   pollHub: "",
