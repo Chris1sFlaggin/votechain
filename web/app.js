@@ -498,33 +498,40 @@ async function pullLogs(fromBlock, toBlock) {
   if (added) { chainItems = chainItems.slice(0, 40); renderExplorer(); }
 }
 
-function evtCard(it) {
+// un blocco del carosello = una transazione, rappresentata come "blocco" della catena
+function blockEl(it) {
   const m = EVT_META[it.name];
   const rows = m.data(it.args)
     .map(([k, v]) => `<div class="evt__kv"><span>${k}</span><b>${escapeHtml(String(v))}</b></div>`).join("");
-  return `<article class="evt evt--${m.kind}" tabindex="0">
-    <div class="evt__row"><span class="evt__ico">${m.ico}</span><span class="evt__title">${m.title}</span><span class="evt__blk">blocco #${it.block}</span></div>
-    <div class="evt__sum">${escapeHtml(m.sum(it.args))}</div>
-    <div class="evt__explain">
+  return `<article class="block block--${m.kind}" tabindex="0">
+    <div class="block__num">blocco #${it.block}</div>
+    <div class="block__head"><span class="block__ico">${m.ico}</span><span class="block__title">${m.title}</span></div>
+    <div class="block__sum">${escapeHtml(m.sum(it.args))}</div>
+    <div class="block__hash">${shortH(it.hash)}</div>
+    <div class="block__explain">
       <p class="evt__why">${m.why}</p>
       <div class="evt__data">${rows}</div>
-      <a class="evt__link" href="https://sepolia.etherscan.io/tx/${it.hash}" target="_blank" rel="noopener">tx ${shortH(it.hash)} su Etherscan ↗</a>
+      <a class="evt__link" href="https://sepolia.etherscan.io/tx/${it.hash}" target="_blank" rel="noopener">tx su Etherscan ↗</a>
     </div>
   </article>`;
 }
+
+// connettore "a catena" fra un blocco e il successivo
+const chainLink = () => `<div class="chain-link" aria-hidden="true"></div>`;
 
 function renderExplorer() {
   const box = $("chainFeed");
   if (!box) return;
   const head = $("chainHead");
-  if (head) head.textContent = chainItems.length ? `in ascolto · ${chainItems.length} eventi recenti` : "in ascolto della rete…";
+  if (head) head.textContent = chainItems.length ? `${chainItems.length} blocchi · in ascolto` : "in ascolto della rete…";
   if (!chainItems.length) {
-    box.innerHTML = `<div class="evt-empty">Nessun evento ancora. Appena qualcuno crea un'identità, vota, o il governo emana/chiude un referendum, comparirà qui in tempo reale. 🔭</div>`;
+    box.innerHTML = `<div class="evt-empty">Nessuna transazione ancora. Appena qualcuno crea un'identità, vota, o il governo emana/chiude un referendum, comparirà qui un blocco in tempo reale.</div>`;
     return;
   }
-  box.innerHTML = chainItems.map(evtCard).join("");
-  // tap-to-toggle per chi non ha l'hover (mobile)
-  box.querySelectorAll(".evt").forEach((el) => {
+  // carosello orizzontale: ogni blocco collegato al successivo da un anello di catena
+  const rail = chainItems.map((it, i) => blockEl(it) + (i < chainItems.length - 1 ? chainLink() : "")).join("");
+  box.innerHTML = `<div class="chain-rail">${rail}</div>`;
+  box.querySelectorAll(".block").forEach((el) => {
     el.onclick = (e) => { if (e.target.closest(".evt__link")) return; el.classList.toggle("evt--open"); };
   });
 }
