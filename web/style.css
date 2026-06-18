@@ -368,8 +368,9 @@ body[data-screen="chain"] .evt-empty{background:#07140d;border-color:#103d26;col
 .block--commit{border-left-color:#e0b020}.block--reveal{border-left-color:#39ff9c}.block--phase{border-left-color:#5f8f74}
 .block--final{border-left-color:#16b364}.block--poll,.block--pollvote{border-left-color:#ff5c9a}
 .block--won{border-left-color:#ffd24a}.block--claim{border-left-color:#39ff9c}
-/* anello che collega un blocco al successivo */
-.chain-link{flex:0 0 30px;align-self:center;height:3px;position:relative;
+/* anello che collega un blocco al successivo: ancorato in alto (alla riga del titolo),
+   così l'espansione di una card NON sposta i connettori delle altre */
+.chain-link{flex:0 0 30px;align-self:flex-start;margin-top:42px;height:3px;position:relative;
   background:linear-gradient(90deg,#103d26,#39ff9c,#103d26)}
 .chain-link::before{content:"";position:absolute;left:50%;top:50%;width:9px;height:9px;border-radius:2px;
   transform:translate(-50%,-50%) rotate(45deg);background:#39ff9c;box-shadow:0 0 8px rgba(57,255,156,.8)}
