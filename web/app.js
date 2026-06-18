@@ -528,8 +528,9 @@ function renderExplorer() {
     box.innerHTML = `<div class="evt-empty">Nessuna transazione ancora. Appena qualcuno crea un'identità, vota, o il governo emana/chiude un referendum, comparirà qui un blocco in tempo reale.</div>`;
     return;
   }
-  // carosello orizzontale: ogni blocco collegato al successivo da un anello di catena
-  const rail = chainItems.map((it, i) => blockEl(it) + (i < chainItems.length - 1 ? chainLink() : "")).join("");
+  // carosello orizzontale: dal più vecchio (sinistra) al più recente (destra)
+  const ordered = [...chainItems].reverse();
+  const rail = ordered.map((it, i) => blockEl(it) + (i < ordered.length - 1 ? chainLink() : "")).join("");
   box.innerHTML = `<div class="chain-rail">${rail}</div>`;
   box.querySelectorAll(".block").forEach((el) => {
     el.onclick = (e) => { if (e.target.closest(".evt__link")) return; el.classList.toggle("evt--open"); };
