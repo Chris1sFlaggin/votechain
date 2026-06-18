@@ -13,6 +13,7 @@ const ROUTER_ABI = [
   "function jurisdictionOf(address, address) view returns (string)",
   "function canVote(address, address, string) view returns (bool)",
   "function isGovernment(address, string) view returns (bool)",
+  "function isAuthority(address) view returns (bool)",
 ];
 const FACTORY_ABI = [
   "function createReferendum(string, string, string[]) returns (address)",
@@ -46,6 +47,8 @@ const POLLHUB_ABI = [
   "function getPoll(uint256) view returns (address creator, string question, bytes32[] options, uint128 stake, uint64 totalVotes, bool won, bool claimed)",
   "function optionVotes(uint256, bytes32) view returns (uint256)",
   "function hasVoted(uint256, address) view returns (bool)",
+  "function endorse(uint256, bool)",
+  "function endorsement(uint256) view returns (bool set, bool approve, address by)",
 ];
 
 const S = { provider: null, signer: null, account: null, router: null, factory: null, pollHub: null };
@@ -565,7 +568,8 @@ async function renderGovDeck() {
     const p = await S.pollHub.getPoll(id).catch(() => null);
     if (p && Number(p.totalVotes) >= MIN_VOTES) {
       const counts = (await Promise.all(p.options.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
-      GOV_DECK.push({ id, p, counts });
+      const end = await S.pollHub.endorsement(id).catch(() => null);
+      GOV_DECK.push({ id, p, counts, end });
     }
   }
   GOV_I = 0;
@@ -573,19 +577,26 @@ async function renderGovDeck() {
     deck.innerHTML = `<div class="deck-empty">Nessun sondaggio ha ancora superato il minimo di ${MIN_VOTES} voti.</div>`;
     return;
   }
-  deck.innerHTML = `<p class="deck-hint">Sfoglia i sondaggi della community (trascina o usa le frecce). Come governo non puoi votare.</p>
+  deck.innerHTML = `<p class="deck-hint">Esprimiti sui sondaggi della community: trascina a destra per <b>approvare</b>, a sinistra per <b>disapprovare</b> (transazione on-chain). Come governo non voti.</p>
     <div class="deck-stack" id="deckStack"></div>
     <div class="deck-ctl">
-      <button class="btn" data-deck="prev">‹</button>
+      <button class="btn deck-no" data-endorse="0">Disapprova</button>
       <span id="deckPos"></span>
-      <button class="btn" data-deck="next">›</button>
+      <button class="btn deck-yes" data-endorse="1">Approva</button>
     </div>`;
-  deck.querySelectorAll("[data-deck]").forEach((b) => b.onclick = () => moveDeck(b.dataset.deck === "next" ? 1 : -1));
+  deck.querySelectorAll("[data-endorse]").forEach((b) => b.onclick = () => endorseTop(b.dataset.endorse === "1"));
   renderDeckTop();
 }
 
+function govBadge(end) {
+  if (!end || !end[0]) return "";
+  return end[1]
+    ? `<span class="gov-badge gov-badge--yes">Approvato dal governo</span>`
+    : `<span class="gov-badge gov-badge--no">Disapprovato dal governo</span>`;
+}
+
 function govPollCard(item) {
-  const { p, counts } = item;
+  const { p, counts, end } = item;
   const options = p.options.map((b) => ethers.decodeBytes32String(b));
   const total = Number(p.totalVotes);
   const opts = options.map((o, i) => {
@@ -599,7 +610,19 @@ function govPollCard(item) {
       <span class="poll__stake">cauzione ${ethers.formatEther(p.stake)}Ξ</span>${badge}</div>
     <h3 class="poll__q">${escapeHtml(p.question)}</h3>
     <div class="bars">${opts}</div>
+    ${govBadge(end)}
   </article>`;
+}
+
+// il governo si esprime on-chain (approva/disapprova) e si passa al prossimo
+async function endorseTop(approve) {
+  const item = GOV_DECK[GOV_I];
+  if (!item) return;
+  const ok = await tx(
+    S.pollHub.endorse(item.id, approve),
+    approve ? "Sondaggio approvato dal governo." : "Sondaggio disapprovato dal governo.",
+  );
+  if (ok) moveDeck(1);
 }
 
 function renderDeckTop() {
@@ -630,18 +653,21 @@ function attachSwipe(card) {
     card.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
     card.style.opacity = String(1 - Math.min(Math.abs(dx) / 420, 0.55));
   };
-  card.onpointerup = () => {
+  card.onpointerup = async () => {
     if (x0 == null) return;
+    const commit = Math.abs(dx) > 90;
+    const approve = dx > 0; // destra = approva, sinistra = disapprova
     card.style.transition = "transform .25s, opacity .25s";
-    if (Math.abs(dx) > 90) {
-      const dir = dx > 0 ? 1 : -1;
-      card.style.transform = `translateX(${dir * 640}px) rotate(${dir * 22}deg)`;
-      card.style.opacity = "0";
-      setTimeout(() => moveDeck(dir > 0 ? 1 : -1), 200);
-    } else {
-      card.style.transform = ""; card.style.opacity = "1";
-    }
+    if (!commit) { card.style.transform = ""; card.style.opacity = "1"; x0 = null; dx = 0; return; }
+    card.style.transform = `translateX(${approve ? 680 : -680}px) rotate(${approve ? 22 : -22}deg)`;
+    card.style.opacity = "0";
     x0 = null; dx = 0;
+    const item = GOV_DECK[GOV_I];
+    const ok = await tx(
+      S.pollHub.endorse(item.id, approve),
+      approve ? "Sondaggio approvato dal governo." : "Sondaggio disapprovato dal governo.",
+    );
+    if (ok) moveDeck(1); else renderDeckTop(); // se la tx fallisce/rifiutata, ripristina la carta
   };
 }
 
@@ -702,6 +728,7 @@ async function pollCard(id) {
   const voted = await S.pollHub.hasVoted(id, S.account).catch(() => false);
   const isCreator = S.account && creator.toLowerCase() === S.account.toLowerCase();
   const counts = (await Promise.all(optsRaw.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
+  const end = await S.pollHub.endorsement(id).catch(() => null);
 
   const opts = options.map((o, i) => {
     const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
@@ -728,6 +755,7 @@ async function pollCard(id) {
   return `<article class="poll">
     <div class="poll__head">${avatar(creator)}<span class="addr">${creator.slice(0, 6)}…${creator.slice(-4)}</span>${tags}<span class="poll__stake">cauzione ${ethers.formatEther(stake)}Ξ</span>${badge}</div>
     <h3 class="poll__q">${escapeHtml(question)}</h3>
+    ${govBadge(end)}
     <div class="poll__opts">${opts}</div>
     <div class="poll__prog"><div class="poll__progbar"><div style="width:${prog}%"></div></div><span>${progLabel}</span></div>
     ${claim}

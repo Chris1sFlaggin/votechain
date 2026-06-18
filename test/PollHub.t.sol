@@ -3,18 +3,47 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {PollHub} from "../src/social/PollHub.sol";
+import {SPIDWalletRouter} from "../src/auth/SPIDWalletRouter.sol";
 import {Errors} from "../src/utils/Errors.sol";
 
-/// Sondaggi social: cauzione + vittoria per significatività statistica + rimborso.
+/// Sondaggi social: cauzione + vittoria per significatività statistica + rimborso + endorsement governo.
 contract PollHubTest is Test {
     PollHub hub;
+    SPIDWalletRouter router;
     address creator = makeAddr("creator");
+    address gov = makeAddr("gov");
     bytes32 constant SI = bytes32("si");
     bytes32 constant NO = bytes32("no");
 
     function setUp() public {
-        hub = new PollHub();
+        router = new SPIDWalletRouter(); // this test = ADMIN
+        router.registerGovernment(gov, "Italia");
+        hub = new PollHub(router);
         vm.deal(creator, 1 ether);
+    }
+
+    function test_endorseOnlyGovernment() public {
+        vm.prank(creator);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        vm.prank(makeAddr("rando"));
+        vm.expectRevert(Errors.NotGovernment.selector);
+        hub.endorse(id, true);
+    }
+
+    function test_governmentEndorsement() public {
+        vm.prank(creator);
+        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        vm.prank(gov);
+        hub.endorse(id, true);
+        (bool set, bool approve, address by) = hub.endorsement(id);
+        assertTrue(set);
+        assertTrue(approve);
+        assertEq(by, gov);
+        // il governo può cambiare in disapprovazione
+        vm.prank(gov);
+        hub.endorse(id, false);
+        (, bool approve2,) = hub.endorsement(id);
+        assertFalse(approve2);
     }
 
     function _opts() internal pure returns (bytes32[] memory o) {

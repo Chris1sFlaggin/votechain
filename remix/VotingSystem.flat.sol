@@ -104,6 +104,139 @@ library VoteVerifier {
     }
 }
 
+// src/auth/Roles.sol
+
+/// @title Roles — minimal, dependency-free access control.
+/// @notice ADMIN manages roles; ORACLE is the (simulated) SPID oracle that may seed
+///         identities. Kept self-contained (no OpenZeppelin) so the package builds
+///         with nothing but solc.
+abstract contract Roles {
+    bytes32 public constant ADMIN = keccak256("ADMIN");
+    bytes32 public constant ORACLE = keccak256("ORACLE");
+
+    mapping(bytes32 => mapping(address => bool)) private _has;
+
+    event RoleGranted(bytes32 indexed role, address indexed account, address indexed by);
+    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed by);
+
+    constructor(address admin) {
+        _grant(ADMIN, admin);
+    }
+
+    modifier onlyRole(bytes32 role) {
+        if (!_has[role][msg.sender]) revert Errors.Unauthorized(role);
+        _;
+    }
+
+    function hasRole(bytes32 role, address account) public view returns (bool) {
+        return _has[role][account];
+    }
+
+    function grantRole(bytes32 role, address account) external onlyRole(ADMIN) {
+        _grant(role, account);
+    }
+
+    function revokeRole(bytes32 role, address account) external onlyRole(ADMIN) {
+        _has[role][account] = false;
+        emit RoleRevoked(role, account, msg.sender);
+    }
+
+    function _grant(bytes32 role, address account) internal {
+        _has[role][account] = true;
+        emit RoleGranted(role, account, msg.sender);
+    }
+}
+
+// src/auth/SPIDWalletRouter.sol
+
+/// @title SPIDWalletRouter — (simulated) SPID authorisation + electoral geofencing.
+/// @notice On-chain projection of the off-chain SPID step. A real accredited IdP
+///         cannot run on-chain; here a citizen self-enrols from their own wallet k_i
+///         (e.g. MetaMask) declaring a jurisdiction — a pure PoC of the flow.
+///         The authorisation is created PER REFERENDUM: a (fake) SPID identity is
+///         bound to the pair (referendum, wallet). The same wallet must create a
+///         FRESH identity for each referendum it wants to vote in, and an identity
+///         created for one referendum never authorises another one.
+///         NO personal data reaches the chain — not even a pseudonym: only the
+///         chosen jurisdiction is stored. Name, surname and codice fiscale never
+///         leave the client. Governments are registered per jurisdiction by the
+///         ADMIN. Geofencing is enforced on-chain via canVote()/isGovernment().
+///
+/// @dev SECURITY (PoC): simulatedSpidLogin() trusts the caller — anyone can enrol any
+///      jurisdiction. In production an accredited IdP + off-chain oracle
+///      would issue the authorisation (binding the jurisdiction to the verified
+///      identity) before it is written here.
+contract SPIDWalletRouter is Roles {
+    struct Wallet {
+        bool authorized;
+        string jurisdiction;
+    }
+
+    // (referendum, k_i) => authorisation — one (fake) SPID identity per referendum
+    mapping(address => mapping(address => Wallet)) private _wallets;
+    // a government may oversee one or more jurisdictions
+    mapping(address => mapping(bytes32 => bool)) private _govFor; // gov => keccak(jurisdiction)
+    mapping(address => bool) private _isAuthority; // gov di almeno una giurisdizione (per PollHub)
+
+    event GovernmentRegistered(address indexed government, string jurisdiction);
+    event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction);
+
+    constructor() Roles(msg.sender) {
+        _grant(ORACLE, msg.sender); // deployer doubles as the simulated SPID oracle
+    }
+
+    // ------------------------------------------------------------- admin (setup)
+    /// @notice Register a government for a jurisdiction (may create referenda there).
+    ///         Can be called multiple times to grant several jurisdictions.
+    function registerGovernment(address government, string calldata jurisdiction) external onlyRole(ADMIN) {
+        _govFor[government][keccak256(bytes(jurisdiction))] = true;
+        _isAuthority[government] = true;
+        emit GovernmentRegistered(government, jurisdiction);
+    }
+
+    // ------------------------------------------------- simulated SPID (static-site)
+    /// @notice SIMULATED SPID login: the caller's wallet k_i self-enrols a fresh
+    ///         identity FOR A SPECIFIC referendum, declaring a jurisdiction. NO
+    ///         identity data is stored on-chain — not even a pseudonym: only the
+    ///         chosen jurisdiction, bound to (referendum, wallet). The same wallet
+    ///         must repeat this for every referendum; an identity does not carry over.
+    ///         Callable directly from a static frontend with no backend.
+    function simulatedSpidLogin(address referendum, string calldata jurisdiction) external {
+        _wallets[referendum][msg.sender] = Wallet(true, jurisdiction);
+        emit WalletAuthorized(referendum, msg.sender, jurisdiction);
+    }
+
+    // -------------------------------------------------------------- views (reads)
+    function isAuthorized(address referendum, address wallet) external view returns (bool) {
+        return _wallets[referendum][wallet].authorized;
+    }
+
+    function jurisdictionOf(address referendum, address wallet) external view returns (string memory) {
+        return _wallets[referendum][wallet].jurisdiction;
+    }
+
+    /// @notice Geofencing: may `wallet` vote in `referendum` of `refJurisdiction`?
+    ///         True only if it created a (fake) SPID identity for THAT referendum
+    ///         in the matching jurisdiction.
+    function canVote(address referendum, address wallet, string calldata refJurisdiction) external view returns (bool) {
+        Wallet memory w = _wallets[referendum][wallet];
+        return w.authorized && _eq(w.jurisdiction, refJurisdiction);
+    }
+
+    function isGovernment(address government, string calldata jurisdiction) external view returns (bool) {
+        return _govFor[government][keccak256(bytes(jurisdiction))];
+    }
+
+    /// @notice È un governo di almeno una giurisdizione? (usato da PollHub per l'endorsement)
+    function isAuthority(address who) external view returns (bool) {
+        return _isAuthority[who];
+    }
+
+    function _eq(string memory a, string memory b) private pure returns (bool) {
+        return keccak256(bytes(a)) == keccak256(bytes(b));
+    }
+}
+
 // src/social/PollHub.sol
 
 /// @title PollHub — sondaggi "social" aperti a tutti (lato non istituzionale).
@@ -133,14 +266,45 @@ contract PollHub {
         bool claimed;
     }
 
+    /// @notice Posizione (endorsement) del governo su un sondaggio: approva/disapprova.
+    struct Gov {
+        bool set;
+        bool approve;
+        address by;
+    }
+
     Poll[] private _polls; // pollId = indice
     mapping(uint256 => mapping(bytes32 => uint256)) public votesOf; // pollId => opzione => conteggio
     mapping(uint256 => mapping(address => bool)) public hasVoted; // pollId => votante => bool
+    mapping(uint256 => Gov) private _gov; // pollId => endorsement del governo
+
+    SPIDWalletRouter public immutable router; // per sapere chi è "governo" (isAuthority)
 
     event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake);
     event Voted(uint256 indexed id, address indexed voter, bytes32 option, uint64 totalVotes);
     event PollWon(uint256 indexed id);
     event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount);
+    event Endorsed(uint256 indexed id, address indexed government, bool approve);
+
+    constructor(SPIDWalletRouter _router) {
+        router = _router;
+    }
+
+    /// @notice Il GOVERNO (qualsiasi giurisdizione) esprime approvazione/disapprovazione
+    ///         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).
+    ///         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain).
+    function endorse(uint256 id, bool approve) external {
+        if (_polls[id].creator == address(0)) revert Errors.BadPoll();
+        if (!router.isAuthority(msg.sender)) revert Errors.NotGovernment();
+        _gov[id] = Gov(true, approve, msg.sender);
+        emit Endorsed(id, msg.sender, approve);
+    }
+
+    /// @notice Endorsement del governo su un sondaggio (se presente).
+    function endorsement(uint256 id) external view returns (bool set, bool approve, address by) {
+        Gov storage g = _gov[id];
+        return (g.set, g.approve, g.by);
+    }
 
     /// @notice Crea un sondaggio depositando la cauzione (msg.value). Nessuna soglia.
     function createPoll(string calldata question, bytes32[] calldata options) external payable returns (uint256 id) {
@@ -246,132 +410,6 @@ contract PollHub {
             if (p.options[i] == o) return true;
         }
         return false;
-    }
-}
-
-// src/auth/Roles.sol
-
-/// @title Roles — minimal, dependency-free access control.
-/// @notice ADMIN manages roles; ORACLE is the (simulated) SPID oracle that may seed
-///         identities. Kept self-contained (no OpenZeppelin) so the package builds
-///         with nothing but solc.
-abstract contract Roles {
-    bytes32 public constant ADMIN = keccak256("ADMIN");
-    bytes32 public constant ORACLE = keccak256("ORACLE");
-
-    mapping(bytes32 => mapping(address => bool)) private _has;
-
-    event RoleGranted(bytes32 indexed role, address indexed account, address indexed by);
-    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed by);
-
-    constructor(address admin) {
-        _grant(ADMIN, admin);
-    }
-
-    modifier onlyRole(bytes32 role) {
-        if (!_has[role][msg.sender]) revert Errors.Unauthorized(role);
-        _;
-    }
-
-    function hasRole(bytes32 role, address account) public view returns (bool) {
-        return _has[role][account];
-    }
-
-    function grantRole(bytes32 role, address account) external onlyRole(ADMIN) {
-        _grant(role, account);
-    }
-
-    function revokeRole(bytes32 role, address account) external onlyRole(ADMIN) {
-        _has[role][account] = false;
-        emit RoleRevoked(role, account, msg.sender);
-    }
-
-    function _grant(bytes32 role, address account) internal {
-        _has[role][account] = true;
-        emit RoleGranted(role, account, msg.sender);
-    }
-}
-
-// src/auth/SPIDWalletRouter.sol
-
-/// @title SPIDWalletRouter — (simulated) SPID authorisation + electoral geofencing.
-/// @notice On-chain projection of the off-chain SPID step. A real accredited IdP
-///         cannot run on-chain; here a citizen self-enrols from their own wallet k_i
-///         (e.g. MetaMask) declaring a jurisdiction — a pure PoC of the flow.
-///         The authorisation is created PER REFERENDUM: a (fake) SPID identity is
-///         bound to the pair (referendum, wallet). The same wallet must create a
-///         FRESH identity for each referendum it wants to vote in, and an identity
-///         created for one referendum never authorises another one.
-///         NO personal data reaches the chain — not even a pseudonym: only the
-///         chosen jurisdiction is stored. Name, surname and codice fiscale never
-///         leave the client. Governments are registered per jurisdiction by the
-///         ADMIN. Geofencing is enforced on-chain via canVote()/isGovernment().
-///
-/// @dev SECURITY (PoC): simulatedSpidLogin() trusts the caller — anyone can enrol any
-///      jurisdiction. In production an accredited IdP + off-chain oracle
-///      would issue the authorisation (binding the jurisdiction to the verified
-///      identity) before it is written here.
-contract SPIDWalletRouter is Roles {
-    struct Wallet {
-        bool authorized;
-        string jurisdiction;
-    }
-
-    // (referendum, k_i) => authorisation — one (fake) SPID identity per referendum
-    mapping(address => mapping(address => Wallet)) private _wallets;
-    // a government may oversee one or more jurisdictions
-    mapping(address => mapping(bytes32 => bool)) private _govFor; // gov => keccak(jurisdiction)
-
-    event GovernmentRegistered(address indexed government, string jurisdiction);
-    event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction);
-
-    constructor() Roles(msg.sender) {
-        _grant(ORACLE, msg.sender); // deployer doubles as the simulated SPID oracle
-    }
-
-    // ------------------------------------------------------------- admin (setup)
-    /// @notice Register a government for a jurisdiction (may create referenda there).
-    ///         Can be called multiple times to grant several jurisdictions.
-    function registerGovernment(address government, string calldata jurisdiction) external onlyRole(ADMIN) {
-        _govFor[government][keccak256(bytes(jurisdiction))] = true;
-        emit GovernmentRegistered(government, jurisdiction);
-    }
-
-    // ------------------------------------------------- simulated SPID (static-site)
-    /// @notice SIMULATED SPID login: the caller's wallet k_i self-enrols a fresh
-    ///         identity FOR A SPECIFIC referendum, declaring a jurisdiction. NO
-    ///         identity data is stored on-chain — not even a pseudonym: only the
-    ///         chosen jurisdiction, bound to (referendum, wallet). The same wallet
-    ///         must repeat this for every referendum; an identity does not carry over.
-    ///         Callable directly from a static frontend with no backend.
-    function simulatedSpidLogin(address referendum, string calldata jurisdiction) external {
-        _wallets[referendum][msg.sender] = Wallet(true, jurisdiction);
-        emit WalletAuthorized(referendum, msg.sender, jurisdiction);
-    }
-
-    // -------------------------------------------------------------- views (reads)
-    function isAuthorized(address referendum, address wallet) external view returns (bool) {
-        return _wallets[referendum][wallet].authorized;
-    }
-
-    function jurisdictionOf(address referendum, address wallet) external view returns (string memory) {
-        return _wallets[referendum][wallet].jurisdiction;
-    }
-
-    /// @notice Geofencing: may `wallet` vote in `referendum` of `refJurisdiction`?
-    ///         True only if it created a (fake) SPID identity for THAT referendum
-    ///         in the matching jurisdiction.
-    function canVote(address referendum, address wallet, string calldata refJurisdiction) external view returns (bool) {
-        Wallet memory w = _wallets[referendum][wallet];
-        return w.authorized && _eq(w.jurisdiction, refJurisdiction);
-    }
-
-    function isGovernment(address government, string calldata jurisdiction) external view returns (bool) {
-        return _govFor[government][keccak256(bytes(jurisdiction))];
-    }
-
-    function _eq(string memory a, string memory b) private pure returns (bool) {
-        return keccak256(bytes(a)) == keccak256(bytes(b));
     }
 }
 
@@ -629,7 +667,7 @@ contract SystemBootstrap {
     constructor() {
         router = new SPIDWalletRouter(); // this contract becomes ADMIN + ORACLE
         factory = new GovFactory(router);
-        pollHub = new PollHub(); // parte social: sondaggi aperti a tutti
+        pollHub = new PollHub(router); // parte social: sondaggi + endorsement del governo
 
         address human = tx.origin; // the EOA deploying via Remix/MetaMask
         router.grantRole(router.ADMIN(), human);

@@ -19,7 +19,7 @@ contract DeploySystem is Script {
 
         SPIDWalletRouter router = new SPIDWalletRouter();
         GovFactory factory = new GovFactory(router);
-        PollHub pollHub = new PollHub(); // social side: open polls
+        PollHub pollHub = new PollHub(router); // social side: open polls + government endorsement
 
         // the deployer doubles as both governments for the local demo
         router.registerGovernment(deployer, "Italia");

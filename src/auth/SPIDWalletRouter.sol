@@ -30,6 +30,7 @@ contract SPIDWalletRouter is Roles {
     mapping(address => mapping(address => Wallet)) private _wallets;
     // a government may oversee one or more jurisdictions
     mapping(address => mapping(bytes32 => bool)) private _govFor; // gov => keccak(jurisdiction)
+    mapping(address => bool) private _isAuthority; // gov di almeno una giurisdizione (per PollHub)
 
     event GovernmentRegistered(address indexed government, string jurisdiction);
     event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction);
@@ -43,6 +44,7 @@ contract SPIDWalletRouter is Roles {
     ///         Can be called multiple times to grant several jurisdictions.
     function registerGovernment(address government, string calldata jurisdiction) external onlyRole(ADMIN) {
         _govFor[government][keccak256(bytes(jurisdiction))] = true;
+        _isAuthority[government] = true;
         emit GovernmentRegistered(government, jurisdiction);
     }
 
@@ -77,6 +79,11 @@ contract SPIDWalletRouter is Roles {
 
     function isGovernment(address government, string calldata jurisdiction) external view returns (bool) {
         return _govFor[government][keccak256(bytes(jurisdiction))];
+    }
+
+    /// @notice È un governo di almeno una giurisdizione? (usato da PollHub per l'endorsement)
+    function isAuthority(address who) external view returns (bool) {
+        return _isAuthority[who];
     }
 
     function _eq(string memory a, string memory b) private pure returns (bool) {

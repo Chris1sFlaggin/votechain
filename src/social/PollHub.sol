@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Errors} from "../utils/Errors.sol";
+import {SPIDWalletRouter} from "../auth/SPIDWalletRouter.sol";
 
 /// @title PollHub — sondaggi "social" aperti a tutti (lato non istituzionale).
 /// @notice Chiunque crea un sondaggio depositando una **cauzione** (stake). Chiunque
@@ -30,14 +31,45 @@ contract PollHub {
         bool claimed;
     }
 
+    /// @notice Posizione (endorsement) del governo su un sondaggio: approva/disapprova.
+    struct Gov {
+        bool set;
+        bool approve;
+        address by;
+    }
+
     Poll[] private _polls; // pollId = indice
     mapping(uint256 => mapping(bytes32 => uint256)) public votesOf; // pollId => opzione => conteggio
     mapping(uint256 => mapping(address => bool)) public hasVoted; // pollId => votante => bool
+    mapping(uint256 => Gov) private _gov; // pollId => endorsement del governo
+
+    SPIDWalletRouter public immutable router; // per sapere chi è "governo" (isAuthority)
 
     event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake);
     event Voted(uint256 indexed id, address indexed voter, bytes32 option, uint64 totalVotes);
     event PollWon(uint256 indexed id);
     event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount);
+    event Endorsed(uint256 indexed id, address indexed government, bool approve);
+
+    constructor(SPIDWalletRouter _router) {
+        router = _router;
+    }
+
+    /// @notice Il GOVERNO (qualsiasi giurisdizione) esprime approvazione/disapprovazione
+    ///         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).
+    ///         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain).
+    function endorse(uint256 id, bool approve) external {
+        if (_polls[id].creator == address(0)) revert Errors.BadPoll();
+        if (!router.isAuthority(msg.sender)) revert Errors.NotGovernment();
+        _gov[id] = Gov(true, approve, msg.sender);
+        emit Endorsed(id, msg.sender, approve);
+    }
+
+    /// @notice Endorsement del governo su un sondaggio (se presente).
+    function endorsement(uint256 id) external view returns (bool set, bool approve, address by) {
+        Gov storage g = _gov[id];
+        return (g.set, g.approve, g.by);
+    }
 
     /// @notice Crea un sondaggio depositando la cauzione (msg.value). Nessuna soglia.
     function createPoll(string calldata question, bytes32[] calldata options) external payable returns (uint256 id) {

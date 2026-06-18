@@ -27,7 +27,7 @@ contract SystemBootstrap {
     constructor() {
         router = new SPIDWalletRouter(); // this contract becomes ADMIN + ORACLE
         factory = new GovFactory(router);
-        pollHub = new PollHub(); // parte social: sondaggi aperti a tutti
+        pollHub = new PollHub(router); // parte social: sondaggi + endorsement del governo
 
         address human = tx.origin; // the EOA deploying via Remix/MetaMask
         router.grantRole(router.ADMIN(), human);

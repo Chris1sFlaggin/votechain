@@ -227,6 +227,16 @@ body[data-screen="social"] .empty,body[data-screen="social"] .muted{color:#9aa3b
 .deck-ctl .btn:hover{border-color:#ff2d55;color:#ff2d55;transform:none}
 #deckPos{color:#9aa3b8;font-weight:700;min-width:64px;text-align:center}
 .deck-empty{text-align:center;color:#9aa3b8;background:#101015;border:1px dashed #2a2a36;border-radius:16px;padding:2rem 1rem}
+.deck-ctl .deck-yes,.deck-ctl .deck-no{width:auto;height:auto;border-radius:999px;padding:.55rem 1.2rem;font-size:.9rem;background:#15151a}
+.deck-ctl .deck-yes{border-color:#1f5a37;color:#4ade80}
+.deck-ctl .deck-yes:hover{border-color:#4ade80;color:#4ade80}
+.deck-ctl .deck-no{border-color:#5a0822;color:#ff6b8a}
+.deck-ctl .deck-no:hover{border-color:#ff6b8a;color:#ff6b8a}
+
+/* badge endorsement del governo (su sondaggi) */
+.gov-badge{display:inline-block;margin:.1rem 0 .5rem;padding:.24rem .65rem;border-radius:999px;font-size:.74rem;font-weight:800}
+.gov-badge--yes{background:#10301f;color:#4ade80;border:1px solid #1f5a37}
+.gov-badge--no{background:#3a0014;color:#ff6b8a;border:1px solid #5a0822}
 
 /* ===== social theme ===== */
 .btn--social{background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;border:none}

@@ -85,7 +85,7 @@ SPID reale è off-chain (IdP accreditato): non gira in una pagina statica. Qui �
 # build
 forge build
 
-# test (32 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
+# test (34 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
 forge test -vv
 
 # deploy locale
@@ -168,7 +168,7 @@ Senza installare nulla, su <https://remix.ethereum.org>:
    **dedicata a quel referendum**, nessun dato personale on-chain), poi `commit`
    (Fase 1) e, dopo che il governo apre lo spoglio, `reveal` (Fase 2) sul `Referendum`.
 
-I 32 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
+I 34 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
 
 ## Deploy su GitHub Pages
 
@@ -207,4 +207,5 @@ Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
 | Nessun dato personale on-chain (solo giurisdizione) | `SPIDWalletRouter` (niente `cfHash`) |
 | Ruoli Governo/Oracolo/Admin | `Roles.sol` + registrazioni nel Router |
 | Secondo wallet governativo fisso | `SystemBootstrap.EXTRA_GOV` (Italia + San Marino) |
+| Endorsement del governo sui sondaggi social (approva/disapprova, on-chain) | `PollHub.endorse(id, approve)` gated su `router.isAuthority(msg.sender)` |
 | Custom errors | `Errors.sol` |
