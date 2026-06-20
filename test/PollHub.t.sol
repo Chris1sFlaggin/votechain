@@ -92,13 +92,13 @@ contract PollHubTest is Test {
         vm.prank(creator);
         uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
         _signN(id, 5, 1);
-        
+
         vm.prank(gov);
         hub.decide(id, false); // RESPINTA
         (,,,,, bool approved, bool decided,) = hub.getPetition(id);
         assertTrue(decided);
         assertFalse(approved);
-        
+
         vm.prank(creator);
         vm.expectRevert(Errors.PollNotWon.selector); // non approvata
         hub.claim(id);
