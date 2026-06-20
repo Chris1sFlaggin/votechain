@@ -141,11 +141,11 @@
 	},
 	"sources": {
 		"remix/VotingSystem.flat.sol": {
-			"keccak256": "0x89c7dd3d46ca9a9488db835a334f9125c40e838c20e3ff2a4ec087a3a936123a",
+			"keccak256": "0x1781a56a04752692e736373cea1f4d0753cda9f9319d516ab9e3b4bf53a28646",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://8a2dbb81ed56b398e8c8e5e34f4309b803015bfe12b907c38f019d33a73c18d7",
-				"dweb:/ipfs/QmPfWVWNBKp3gK9a1iKCp2V1XBVJzoR3X1ar9Tvcq4pTFc"
+				"bzz-raw://eee05b3c659a5a8e48520315d77253bcd35bc4842872b29f33287737fcf68534",
+				"dweb:/ipfs/QmTTHtSiknd1Ldh4gUMsPMFzdYhsFnhFqwZfRvanQiP4n1"
 			]
 		}
 	},

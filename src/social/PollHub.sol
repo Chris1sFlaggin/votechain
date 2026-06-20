@@ -144,7 +144,7 @@ contract PollHub {
 
     /// @notice Restituisce l'elenco dei firmatari (per trasparenza, gas permitting).
     ///         Nota: per petizioni con molti firmatari può costare gas.
-    function getSigners(uint256 id) external view returns (address[] memory) {
+    function getSigners(uint256 /* id */) external pure returns (address[] memory) {
         // Non implementato on-chain per efficienza; il frontend può indicizzare dagli eventi Signed.
         return new address[](0);
     }

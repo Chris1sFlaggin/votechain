@@ -52,9 +52,35 @@
 				"type": "error"
 			},
 			{
-				"inputs": [],
-				"name": "UnknownOption",
-				"type": "error"
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "title",
+						"type": "string"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint128",
+						"name": "stake",
+						"type": "uint128"
+					}
+				],
+				"name": "PetitionCreated",
+				"type": "event"
 			},
 			{
 				"anonymous": false,
@@ -74,11 +100,11 @@
 					{
 						"indexed": false,
 						"internalType": "bool",
-						"name": "approve",
+						"name": "approved",
 						"type": "bool"
 					}
 				],
-				"name": "Endorsed",
+				"name": "PetitionDecided",
 				"type": "event"
 			},
 			{
@@ -93,36 +119,17 @@
 					{
 						"indexed": true,
 						"internalType": "address",
-						"name": "creator",
+						"name": "signer",
 						"type": "address"
 					},
 					{
 						"indexed": false,
-						"internalType": "string",
-						"name": "question",
-						"type": "string"
-					},
-					{
-						"indexed": false,
-						"internalType": "uint128",
-						"name": "stake",
-						"type": "uint128"
+						"internalType": "uint64",
+						"name": "totalSignatures",
+						"type": "uint64"
 					}
 				],
-				"name": "PollCreated",
-				"type": "event"
-			},
-			{
-				"anonymous": false,
-				"inputs": [
-					{
-						"indexed": true,
-						"internalType": "uint256",
-						"name": "id",
-						"type": "uint256"
-					}
-				],
-				"name": "PollWon",
+				"name": "Signed",
 				"type": "event"
 			},
 			{
@@ -151,39 +158,8 @@
 				"type": "event"
 			},
 			{
-				"anonymous": false,
-				"inputs": [
-					{
-						"indexed": true,
-						"internalType": "uint256",
-						"name": "id",
-						"type": "uint256"
-					},
-					{
-						"indexed": true,
-						"internalType": "address",
-						"name": "voter",
-						"type": "address"
-					},
-					{
-						"indexed": false,
-						"internalType": "bytes32",
-						"name": "option",
-						"type": "bytes32"
-					},
-					{
-						"indexed": false,
-						"internalType": "uint64",
-						"name": "totalVotes",
-						"type": "uint64"
-					}
-				],
-				"name": "Voted",
-				"type": "event"
-			},
-			{
 				"inputs": [],
-				"name": "MIN_VOTES",
+				"name": "MIN_SIGNATURES",
 				"outputs": [
 					{
 						"internalType": "uint64",
@@ -211,16 +187,16 @@
 				"inputs": [
 					{
 						"internalType": "string",
-						"name": "question",
+						"name": "title",
 						"type": "string"
 					},
 					{
-						"internalType": "bytes32[]",
-						"name": "options",
-						"type": "bytes32[]"
+						"internalType": "string",
+						"name": "description",
+						"type": "string"
 					}
 				],
-				"name": "createPoll",
+				"name": "createPetition",
 				"outputs": [
 					{
 						"internalType": "uint256",
@@ -244,7 +220,7 @@
 						"type": "bool"
 					}
 				],
-				"name": "endorse",
+				"name": "decide",
 				"outputs": [],
 				"stateMutability": "nonpayable",
 				"type": "function"
@@ -257,16 +233,16 @@
 						"type": "uint256"
 					}
 				],
-				"name": "endorsement",
+				"name": "decision",
 				"outputs": [
 					{
 						"internalType": "bool",
-						"name": "set",
+						"name": "decided",
 						"type": "bool"
 					},
 					{
 						"internalType": "bool",
-						"name": "approve",
+						"name": "approved",
 						"type": "bool"
 					},
 					{
@@ -286,7 +262,7 @@
 						"type": "uint256"
 					}
 				],
-				"name": "getPoll",
+				"name": "getPetition",
 				"outputs": [
 					{
 						"internalType": "address",
@@ -295,13 +271,13 @@
 					},
 					{
 						"internalType": "string",
-						"name": "question",
+						"name": "title",
 						"type": "string"
 					},
 					{
-						"internalType": "bytes32[]",
-						"name": "options",
-						"type": "bytes32[]"
+						"internalType": "string",
+						"name": "description",
+						"type": "string"
 					},
 					{
 						"internalType": "uint128",
@@ -310,12 +286,17 @@
 					},
 					{
 						"internalType": "uint64",
-						"name": "totalVotes",
+						"name": "signatureCount",
 						"type": "uint64"
 					},
 					{
 						"internalType": "bool",
-						"name": "won",
+						"name": "approved",
+						"type": "bool"
+					},
+					{
+						"internalType": "bool",
+						"name": "decided",
 						"type": "bool"
 					},
 					{
@@ -333,6 +314,25 @@
 						"internalType": "uint256",
 						"name": "",
 						"type": "uint256"
+					}
+				],
+				"name": "getSigners",
+				"outputs": [
+					{
+						"internalType": "address[]",
+						"name": "",
+						"type": "address[]"
+					}
+				],
+				"stateMutability": "pure",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
 					},
 					{
 						"internalType": "address",
@@ -340,7 +340,7 @@
 						"type": "address"
 					}
 				],
-				"name": "hasVoted",
+				"name": "hasSigned",
 				"outputs": [
 					{
 						"internalType": "bool",
@@ -359,17 +359,17 @@
 						"type": "uint256"
 					},
 					{
-						"internalType": "bytes32",
-						"name": "option",
-						"type": "bytes32"
+						"internalType": "address",
+						"name": "signer",
+						"type": "address"
 					}
 				],
-				"name": "optionVotes",
+				"name": "hasSignedPetition",
 				"outputs": [
 					{
-						"internalType": "uint256",
+						"internalType": "bool",
 						"name": "",
-						"type": "uint256"
+						"type": "bool"
 					}
 				],
 				"stateMutability": "view",
@@ -377,7 +377,7 @@
 			},
 			{
 				"inputs": [],
-				"name": "pollsCount",
+				"name": "petitionsCount",
 				"outputs": [
 					{
 						"internalType": "uint256",
@@ -409,104 +409,44 @@
 						"type": "uint256"
 					}
 				],
-				"name": "standing",
-				"outputs": [
-					{
-						"internalType": "uint256",
-						"name": "top",
-						"type": "uint256"
-					},
-					{
-						"internalType": "uint256",
-						"name": "second",
-						"type": "uint256"
-					},
-					{
-						"internalType": "uint64",
-						"name": "total",
-						"type": "uint64"
-					},
-					{
-						"internalType": "bool",
-						"name": "won",
-						"type": "bool"
-					}
-				],
-				"stateMutability": "view",
-				"type": "function"
-			},
-			{
-				"inputs": [
-					{
-						"internalType": "uint256",
-						"name": "id",
-						"type": "uint256"
-					},
-					{
-						"internalType": "bytes32",
-						"name": "option",
-						"type": "bytes32"
-					}
-				],
-				"name": "vote",
+				"name": "sign",
 				"outputs": [],
 				"stateMutability": "nonpayable",
-				"type": "function"
-			},
-			{
-				"inputs": [
-					{
-						"internalType": "uint256",
-						"name": "",
-						"type": "uint256"
-					},
-					{
-						"internalType": "bytes32",
-						"name": "",
-						"type": "bytes32"
-					}
-				],
-				"name": "votesOf",
-				"outputs": [
-					{
-						"internalType": "uint256",
-						"name": "",
-						"type": "uint256"
-					}
-				],
-				"stateMutability": "view",
 				"type": "function"
 			}
 		],
 		"devdoc": {
 			"kind": "dev",
 			"methods": {},
-			"title": "PollHub — sondaggi \"social\" aperti a tutti (lato non istituzionale).",
+			"title": "PollHub — raccolta firme social (petizioni).",
 			"version": 1
 		},
 		"userdoc": {
 			"kind": "user",
 			"methods": {
 				"claim(uint256)": {
-					"notice": "Il creatore riprende la cauzione SE il sondaggio ha vinto."
+					"notice": "Il creatore riprende la cauzione SE la raccolta è stata APPROVATA dal governo."
 				},
-				"createPoll(string,bytes32[])": {
-					"notice": "Crea un sondaggio depositando la cauzione (msg.value). Nessuna soglia."
+				"createPetition(string,string)": {
+					"notice": "Crea una raccolta firme depositando la cauzione (msg.value).         Non servono opzioni: è una petizione unica (si firma o no)."
 				},
-				"endorse(uint256,bool)": {
-					"notice": "Il GOVERNO (qualsiasi giurisdizione) esprime approvazione/disapprovazione         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain)."
+				"decide(uint256,bool)": {
+					"notice": "Il GOVERNO (qualsiasi giurisdizione) approva o respinge una raccolta firme         che ha raggiunto MIN_SIGNATURES. È una transazione on-chain; può cambiare idea         (l'ultima decide) finché non viene reclamata la cauzione.         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain)."
 				},
-				"endorsement(uint256)": {
-					"notice": "Endorsement del governo su un sondaggio (se presente)."
+				"decision(uint256)": {
+					"notice": "Decisione del governo su una raccolta firme (se presente)."
 				},
-				"standing(uint256)": {
-					"notice": "Stato per la UI: voti primo/secondo, totale, e se ha vinto."
+				"getSigners(uint256)": {
+					"notice": "Restituisce l'elenco dei firmatari (per trasparenza, gas permitting).         Nota: per petizioni con molti firmatari può costare gas."
 				},
-				"vote(uint256,bytes32)": {
-					"notice": "Vota un'opzione (una sola volta per indirizzo)."
+				"hasSignedPetition(uint256,address)": {
+					"notice": "Verifica se un indirizzo ha firmato una petizione."
+				},
+				"sign(uint256)": {
+					"notice": "Firma una raccolta firme (una sola volta per indirizzo).         Non ci sono opzioni: la firma è unica per petizione."
 				}
 			},
-			"notice": "Chiunque crea un sondaggio depositando una **cauzione** (stake). Chiunque         vota una volta sola. Il sondaggio \"vince\" quando il risultato è         **statisticamente significativo**: la soglia NON è scelta dal creatore ma         calcolata dal contratto secondo l'errore standard.         Regola (≈95% di confidenza, 2 errori standard, su n = voti totali):             vince  ⇔  n ≥ MIN_VOTES  e  (primo − secondo) > 2·√n         Per evitare la radice on-chain si confronta al quadrato:             (primo − secondo)² > 4·n         Quando vince, il creatore riprende la cauzione (claim). Se non raggiunge         mai la significatività, la cauzione resta bloccata (anti-spam). Nessuna         identità/SPID/giurisdizione: parte aperta e social.",
+			"notice": "Chiunque crea una raccolta firme depositando una **cauzione** (stake anti-spam).         I cittadini firmano una sola volta (autenticazione via wallet).         Nessun voto su opzioni: è una petizione unica (sì/firma).         Se si superano **MIN_SIGNATURES** (5 per PoC), la raccolta diventa \"approvabile\"         dal governo. Il governo vede DUE liste:           1. Tutte le raccolte firme (anche sotto soglia)           2. Raccolte firme con ≥ MIN_SIGNATURES → può approvare o respingere.         Se approvata, il creatore riprende la cauzione; se respinta, la cauzione resta bloccata.         Nessuna identità/SPID/giurisdizione: parte aperta e social.",
 			"version": 1
 		}
 	},
@@ -527,11 +467,11 @@
 	},
 	"sources": {
 		"remix/VotingSystem.flat.sol": {
-			"keccak256": "0x89c7dd3d46ca9a9488db835a334f9125c40e838c20e3ff2a4ec087a3a936123a",
+			"keccak256": "0x1781a56a04752692e736373cea1f4d0753cda9f9319d516ab9e3b4bf53a28646",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://8a2dbb81ed56b398e8c8e5e34f4309b803015bfe12b907c38f019d33a73c18d7",
-				"dweb:/ipfs/QmPfWVWNBKp3gK9a1iKCp2V1XBVJzoR3X1ar9Tvcq4pTFc"
+				"bzz-raw://eee05b3c659a5a8e48520315d77253bcd35bc4842872b29f33287737fcf68534",
+				"dweb:/ipfs/QmTTHtSiknd1Ldh4gUMsPMFzdYhsFnhFqwZfRvanQiP4n1"
 			]
 		}
 	},
