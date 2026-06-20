@@ -1,0 +1,168 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [
+					{
+						"internalType": "contract SPIDWalletRouter",
+						"name": "_router",
+						"type": "address"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "constructor"
+			},
+			{
+				"inputs": [],
+				"name": "EmptyOptions",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NotGovernment",
+				"type": "error"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "referendum",
+						"type": "address"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "government",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "jurisdiction",
+						"type": "string"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "title",
+						"type": "string"
+					}
+				],
+				"name": "ReferendumCreated",
+				"type": "event"
+			},
+			{
+				"inputs": [],
+				"name": "count",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "title",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "jurisdiction",
+						"type": "string"
+					},
+					{
+						"internalType": "string[]",
+						"name": "optionLabels",
+						"type": "string[]"
+					}
+				],
+				"name": "createReferendum",
+				"outputs": [
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "getReferenda",
+				"outputs": [
+					{
+						"internalType": "address[]",
+						"name": "",
+						"type": "address[]"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "router",
+				"outputs": [
+					{
+						"internalType": "contract SPIDWalletRouter",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"title": "GovFactory — lets a registered government deploy new Referendum contracts.",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"notice": "The government calls createReferendum() and a dedicated Referendum `i`         contract is deployed via `new` (on-chain factory). A government may only         create referenda in its OWN jurisdiction (creation-side geofencing,         enforced through the SPIDWalletRouter).",
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"remix/VotingSystem.flat.sol": "GovFactory"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"remix/VotingSystem.flat.sol": {
+			"keccak256": "0x89c7dd3d46ca9a9488db835a334f9125c40e838c20e3ff2a4ec087a3a936123a",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://8a2dbb81ed56b398e8c8e5e34f4309b803015bfe12b907c38f019d33a73c18d7",
+				"dweb:/ipfs/QmPfWVWNBKp3gK9a1iKCp2V1XBVJzoR3X1ar9Tvcq4pTFc"
+			]
+		}
+	},
+	"version": 1
+}

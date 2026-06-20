@@ -1,0 +1,539 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [
+					{
+						"internalType": "contract SPIDWalletRouter",
+						"name": "_router",
+						"type": "address"
+					}
+				],
+				"stateMutability": "nonpayable",
+				"type": "constructor"
+			},
+			{
+				"inputs": [],
+				"name": "AlreadyClaimed",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "AlreadyVoted",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "BadPoll",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "BelowMinVotes",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NotCreator",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NotGovernment",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "PollNotWon",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "UnknownOption",
+				"type": "error"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "government",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "bool",
+						"name": "approve",
+						"type": "bool"
+					}
+				],
+				"name": "Endorsed",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "string",
+						"name": "question",
+						"type": "string"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint128",
+						"name": "stake",
+						"type": "uint128"
+					}
+				],
+				"name": "PollCreated",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"name": "PollWon",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint128",
+						"name": "amount",
+						"type": "uint128"
+					}
+				],
+				"name": "StakeClaimed",
+				"type": "event"
+			},
+			{
+				"anonymous": false,
+				"inputs": [
+					{
+						"indexed": true,
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"indexed": true,
+						"internalType": "address",
+						"name": "voter",
+						"type": "address"
+					},
+					{
+						"indexed": false,
+						"internalType": "bytes32",
+						"name": "option",
+						"type": "bytes32"
+					},
+					{
+						"indexed": false,
+						"internalType": "uint64",
+						"name": "totalVotes",
+						"type": "uint64"
+					}
+				],
+				"name": "Voted",
+				"type": "event"
+			},
+			{
+				"inputs": [],
+				"name": "MIN_VOTES",
+				"outputs": [
+					{
+						"internalType": "uint64",
+						"name": "",
+						"type": "uint64"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"name": "claim",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "string",
+						"name": "question",
+						"type": "string"
+					},
+					{
+						"internalType": "bytes32[]",
+						"name": "options",
+						"type": "bytes32[]"
+					}
+				],
+				"name": "createPoll",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "payable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "approve",
+						"type": "bool"
+					}
+				],
+				"name": "endorse",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"name": "endorsement",
+				"outputs": [
+					{
+						"internalType": "bool",
+						"name": "set",
+						"type": "bool"
+					},
+					{
+						"internalType": "bool",
+						"name": "approve",
+						"type": "bool"
+					},
+					{
+						"internalType": "address",
+						"name": "by",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"name": "getPoll",
+				"outputs": [
+					{
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					},
+					{
+						"internalType": "string",
+						"name": "question",
+						"type": "string"
+					},
+					{
+						"internalType": "bytes32[]",
+						"name": "options",
+						"type": "bytes32[]"
+					},
+					{
+						"internalType": "uint128",
+						"name": "stake",
+						"type": "uint128"
+					},
+					{
+						"internalType": "uint64",
+						"name": "totalVotes",
+						"type": "uint64"
+					},
+					{
+						"internalType": "bool",
+						"name": "won",
+						"type": "bool"
+					},
+					{
+						"internalType": "bool",
+						"name": "claimed",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"name": "hasVoted",
+				"outputs": [
+					{
+						"internalType": "bool",
+						"name": "",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "option",
+						"type": "bytes32"
+					}
+				],
+				"name": "optionVotes",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "pollsCount",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [],
+				"name": "router",
+				"outputs": [
+					{
+						"internalType": "contract SPIDWalletRouter",
+						"name": "",
+						"type": "address"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					}
+				],
+				"name": "standing",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "top",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "second",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint64",
+						"name": "total",
+						"type": "uint64"
+					},
+					{
+						"internalType": "bool",
+						"name": "won",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "id",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "option",
+						"type": "bytes32"
+					}
+				],
+				"name": "vote",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bytes32",
+						"name": "",
+						"type": "bytes32"
+					}
+				],
+				"name": "votesOf",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"title": "PollHub — sondaggi \"social\" aperti a tutti (lato non istituzionale).",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {
+				"claim(uint256)": {
+					"notice": "Il creatore riprende la cauzione SE il sondaggio ha vinto."
+				},
+				"createPoll(string,bytes32[])": {
+					"notice": "Crea un sondaggio depositando la cauzione (msg.value). Nessuna soglia."
+				},
+				"endorse(uint256,bool)": {
+					"notice": "Il GOVERNO (qualsiasi giurisdizione) esprime approvazione/disapprovazione         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain)."
+				},
+				"endorsement(uint256)": {
+					"notice": "Endorsement del governo su un sondaggio (se presente)."
+				},
+				"standing(uint256)": {
+					"notice": "Stato per la UI: voti primo/secondo, totale, e se ha vinto."
+				},
+				"vote(uint256,bytes32)": {
+					"notice": "Vota un'opzione (una sola volta per indirizzo)."
+				}
+			},
+			"notice": "Chiunque crea un sondaggio depositando una **cauzione** (stake). Chiunque         vota una volta sola. Il sondaggio \"vince\" quando il risultato è         **statisticamente significativo**: la soglia NON è scelta dal creatore ma         calcolata dal contratto secondo l'errore standard.         Regola (≈95% di confidenza, 2 errori standard, su n = voti totali):             vince  ⇔  n ≥ MIN_VOTES  e  (primo − secondo) > 2·√n         Per evitare la radice on-chain si confronta al quadrato:             (primo − secondo)² > 4·n         Quando vince, il creatore riprende la cauzione (claim). Se non raggiunge         mai la significatività, la cauzione resta bloccata (anti-spam). Nessuna         identità/SPID/giurisdizione: parte aperta e social.",
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"remix/VotingSystem.flat.sol": "PollHub"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"remix/VotingSystem.flat.sol": {
+			"keccak256": "0x89c7dd3d46ca9a9488db835a334f9125c40e838c20e3ff2a4ec087a3a936123a",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://8a2dbb81ed56b398e8c8e5e34f4309b803015bfe12b907c38f019d33a73c18d7",
+				"dweb:/ipfs/QmPfWVWNBKp3gK9a1iKCp2V1XBVJzoR3X1ar9Tvcq4pTFc"
+			]
+		}
+	},
+	"version": 1
+}

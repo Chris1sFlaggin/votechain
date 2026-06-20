@@ -1,0 +1,153 @@
+{
+	"compiler": {
+		"version": "0.8.30+commit.73712a01"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [],
+				"name": "AlreadyClaimed",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "AlreadyFinalized",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "AlreadyRevealed",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "AlreadyVoted",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "BadPoll",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "BelowMinVotes",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "CloseOnlyFromTally",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "EmptyOptions",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "GovernmentCannotVote",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NoVote",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NonceGiaUtilizzato",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NotCreator",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "NotGovernment",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "OutOfJurisdiction",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "PollNotWon",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "RevealClosed",
+				"type": "error"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "bytes32",
+						"name": "role",
+						"type": "bytes32"
+					}
+				],
+				"name": "Unauthorized",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "UnknownOption",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "VotingNotOpen",
+				"type": "error"
+			},
+			{
+				"inputs": [],
+				"name": "WalletNotAuthorized",
+				"type": "error"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"title": "Errors — custom errors shared across the voting system (gas-efficient).",
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"remix/VotingSystem.flat.sol": "Errors"
+		},
+		"evmVersion": "prague",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": false,
+			"runs": 200
+		},
+		"remappings": []
+	},
+	"sources": {
+		"remix/VotingSystem.flat.sol": {
+			"keccak256": "0x89c7dd3d46ca9a9488db835a334f9125c40e838c20e3ff2a4ec087a3a936123a",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://8a2dbb81ed56b398e8c8e5e34f4309b803015bfe12b907c38f019d33a73c18d7",
+				"dweb:/ipfs/QmPfWVWNBKp3gK9a1iKCp2V1XBVJzoR3X1ar9Tvcq4pTFc"
+			]
+		}
+	},
+	"version": 1
+}
