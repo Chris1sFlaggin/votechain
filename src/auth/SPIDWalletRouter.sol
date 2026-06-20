@@ -12,7 +12,7 @@ import {Roles} from "./Roles.sol";
 ///         FRESH identity for each referendum it wants to vote in, and an identity
 ///         created for one referendum never authorises another one.
 ///         NO personal data reaches the chain — not even a pseudonym: only the
-///         chosen jurisdiction is stored. Name, surname and codice fiscale never
+///         chosen jurisdiction is stored. Name, surname never
 ///         leave the client. Governments are registered per jurisdiction by the
 ///         ADMIN. Geofencing is enforced on-chain via canVote()/isGovernment().
 ///
@@ -69,7 +69,7 @@ contract SPIDWalletRouter is Roles {
         return _wallets[referendum][wallet].jurisdiction;
     }
 
-    /// @notice Geofencing: may `wallet` vote in `referendum` of `refJurisdiction`?
+    /// @notice Geofencing: can `wallet` vote in `referendum` of `refJurisdiction`?
     ///         True only if it created a (fake) SPID identity for THAT referendum
     ///         in the matching jurisdiction.
     function canVote(address referendum, address wallet, string calldata refJurisdiction) external view returns (bool) {

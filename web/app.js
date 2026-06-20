@@ -40,15 +40,14 @@ const REF_ABI = [
 ];
 const BOOTSTRAP_ABI = ["function addresses() view returns (address, address, address)"];
 const POLLHUB_ABI = [
-  "function createPoll(string, bytes32[]) payable returns (uint256)",
-  "function vote(uint256, bytes32)",
+  "function createPetition(string, string) payable returns (uint256)",
+  "function sign(uint256)",
   "function claim(uint256)",
-  "function pollsCount() view returns (uint256)",
-  "function getPoll(uint256) view returns (address creator, string question, bytes32[] options, uint128 stake, uint64 totalVotes, bool won, bool claimed)",
-  "function optionVotes(uint256, bytes32) view returns (uint256)",
-  "function hasVoted(uint256, address) view returns (bool)",
-  "function endorse(uint256, bool)",
-  "function endorsement(uint256) view returns (bool set, bool approve, address by)",
+  "function petitionsCount() view returns (uint256)",
+  "function getPetition(uint256) view returns (address creator, string title, string description, uint128 stake, uint64 signatureCount, bool approved, bool decided, bool claimed)",
+  "function hasSignedPetition(uint256, address) view returns (bool)",
+  "function decide(uint256, bool)",
+  "function decision(uint256) view returns (bool decided, bool approved, address by)",
 ];
 
 const S = { provider: null, signer: null, account: null, router: null, factory: null, pollHub: null };
@@ -377,9 +376,9 @@ const EXPLORER_IFACE = new ethers.Interface([
   "event Revealed(address indexed voter, string vote, string nonce, bool matches)",
   "event PhaseChanged(uint8 phase)",
   "event Finalized(uint256 valid, uint256 nullified)",
-  "event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake)",
-  "event Voted(uint256 indexed id, address indexed voter, bytes32 option, uint64 totalVotes)",
-  "event PollWon(uint256 indexed id)",
+  "event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake)",
+  "event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures)",
+  "event PetitionDecided(uint256 indexed id, address indexed government, bool approved)",
   "event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount)",
 ]);
 const PHASE_NAME = ["Configurazione", "Votazione", "Spoglio", "Chiuso"];
@@ -430,29 +429,29 @@ const EVT_META = {
     why: "Il referendum è chiuso: il conteggio ufficiale è stato calcolato dal contratto stesso e non è più modificabile. Gli esiti diventano pubblici e definitivi.",
     data: (a) => [["Voti validi", String(a.valid)], ["Voti nulli", String(a.nullified)]],
   },
-  PollCreated: {
-    ico: "", kind: "poll", title: "Sondaggio creato",
-    sum: (a) => `«${a.question}» · cauzione ${ethers.formatEther(a.stake)}Ξ`,
-    why: "Sondaggio social aperto a tutti: il creatore blocca una piccola cauzione (anti-spam) che riprende se il sondaggio raggiunge significatività statistica. I fondi sono custoditi dal contratto, non da una persona.",
-    data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Domanda", a.question], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`]],
+  PetitionCreated: {
+    ico: "", kind: "poll", title: "Raccolta firme creata",
+    sum: (a) => `«${a.title}» · cauzione ${ethers.formatEther(a.stake)}Ξ`,
+    why: "Un cittadino ha avviato una raccolta firme depositando una cauzione (anti-spam). La petizione è aperta a tutti: basta firmare con il proprio wallet.",
+    data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Titolo", a.title], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`]],
   },
-  Voted: {
-    ico: "", kind: "pollvote", title: "Voto sondaggio",
-    sum: (a) => `${decodeOpt(a.option)} · totale ${a.totalVotes}`,
-    why: "Voto pubblico (non segreto) in un sondaggio social. Ogni indirizzo può votare una sola volta: è il contratto a impedire i doppioni, senza bisogno di un'autorità centrale.",
-    data: (a) => [["Sondaggio", String(a.id)], ["Votante", shortA(a.voter)], ["Opzione", decodeOpt(a.option)], ["Voti totali", String(a.totalVotes)]],
+  Signed: {
+    ico: "", kind: "pollvote", title: "Firma raccolta",
+    sum: (a) => `firmato · totale ${a.totalSignatures}`,
+    why: "Un cittadino ha firmato la petizione. Ogni indirizzo può firmare una sola volta: il contratto impedisce i doppioni.",
+    data: (a) => [["Petizione", String(a.id)], ["Firmatario", shortA(a.signer)], ["Firme totali", String(a.totalSignatures)]],
   },
-  PollWon: {
-    ico: "", kind: "won", title: "Sondaggio vinto",
-    sum: () => "risultato statisticamente significativo",
-    why: "Il distacco fra le opzioni è abbastanza ampio da essere significativo (≈95%): il sondaggio è «vinto» e la cauzione diventa riscattabile.",
-    data: (a) => [["Sondaggio", String(a.id)]],
+  PetitionDecided: {
+    ico: "", kind: "won", title: "Petizione decisa dal governo",
+    sum: (a) => `${a.approved ? "APPROVATA" : "RESPINTA"} dal governo`,
+    why: "Il governo ha espresso la sua decisione sulla petizione che ha raggiunto la soglia minima di firme. Se approvata, il creatore può reclamare la cauzione.",
+    data: (a) => [["Petizione", String(a.id)], ["Governo", shortA(a.government)], ["Decisione", a.approved ? "Approvata" : "Respinta"]],
   },
   StakeClaimed: {
     ico: "", kind: "claim", title: "Cauzione riscattata",
     sum: (a) => `${ethers.formatEther(a.amount)}Ξ restituiti al creatore`,
-    why: "Il creatore riprende la cauzione dopo la vittoria del sondaggio: un trasferimento di ETH eseguito e tracciato dal contratto, verificabile da chiunque.",
-    data: (a) => [["Sondaggio", String(a.id)], ["Creatore", shortA(a.creator)], ["Importo", `${ethers.formatEther(a.amount)} ETH`]],
+    why: "Il creatore riprende la cauzione dopo l'approvazione della petizione da parte del governo: un trasferimento di ETH eseguito e tracciato dal contratto, verificabile da chiunque.",
+    data: (a) => [["Petizione", String(a.id)], ["Creatore", shortA(a.creator)], ["Importo", `${ethers.formatEther(a.amount)} ETH`]],
   },
 };
 
@@ -553,145 +552,103 @@ function showScreen(which) {
 
 const MIN_VOTES = 5; // soglia minima di voti perché un sondaggio "conti" (significatività)
 
-// Social: il governo NON vota — sfoglia in stile Tinder (swipe) solo i sondaggi che hanno
-// superato il minimo di voti. Gli utenti normali vedono il feed e votano.
+// Social: il governo vede le due pagine (Tutte le raccolte, e Da Approvare).
+// I cittadini vedono il feed delle raccolte firme e possono firmare.
 function renderSocial() {
   const connected = !!(S.account && S.pollHub);
-  $("socialHero").classList.toggle("hidden", connected); // niente "Connetti wallet"/titolo da connesso
+  $("socialHero").classList.toggle("hidden", connected);
   $("pollFeed").classList.toggle("hidden", connected && IS_GOV);
-  $("govDeck").classList.toggle("hidden", !(connected && IS_GOV));
-  document.querySelector('[data-snav="create"]').classList.toggle("hidden", IS_GOV); // gov non crea/vota
+  $("govAreaSocial").classList.toggle("hidden", !(connected && IS_GOV));
+  document.querySelector('[data-snav="create"]').classList.toggle("hidden", IS_GOV);
   if (!connected) return;
-  if (IS_GOV) renderGovDeck(); else renderPolls();
+  if (IS_GOV) {
+    if (!$("govTabPending").onclick) {
+      $("govTabPending").onclick = () => { govShow("pending"); renderGovLists(); };
+      $("govTabAll").onclick = () => { govShow("all"); renderGovLists(); };
+      govShow("pending");
+    }
+    renderGovLists();
+  } else {
+    renderPolls();
+  }
 }
 
-// ---- deck "Tinder" del governo: sola visualizzazione (swipe), niente voto ----
-let GOV_DECK = [];
-let GOV_I = 0;
+function govShow(tab) {
+  $("govTabAll").className = tab === "all" ? "btn btn--primary" : "btn btn--secondary";
+  $("govTabPending").className = tab === "pending" ? "btn btn--primary" : "btn btn--secondary";
+  $("govAllList").classList.toggle("hidden", tab !== "all");
+  $("govPendingList").classList.toggle("hidden", tab !== "pending");
+}
 
-async function renderGovDeck() {
-  const deck = $("govDeck");
-  if (!S.pollHub) { deck.innerHTML = `<div class="deck-empty">Sondaggi non disponibili su questa rete.</div>`; return; }
-  let n;
-  try { n = Number(await S.pollHub.pollsCount()); } catch (e) { deck.innerHTML = `<div class="deck-empty">Errore: ${reason(e)}</div>`; return; }
-  GOV_DECK = [];
-  for (let id = 0; id < n; id++) {
-    const p = await S.pollHub.getPoll(id).catch(() => null);
-    if (!p || Number(p.totalVotes) < MIN_VOTES) continue; // solo oltre il minimo (hardcoded 5)
-    const end = await S.pollHub.endorsement(id).catch(() => null);
-    if (end && end[0]) continue; // già approvato/disapprovato → non si mostra più
-    const counts = (await Promise.all(p.options.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
-    GOV_DECK.push({ id, p, counts, end });
-  }
-  GOV_I = 0;
-  if (!GOV_DECK.length) {
-    deck.innerHTML = `<div class="deck-empty">Nessun sondaggio ha ancora superato il minimo di ${MIN_VOTES} voti.</div>`;
+// Renderizza liste per il governo (tutte / da approvare)
+async function renderGovLists() {
+  const allBox = $("govAllList");
+  const pendingBox = $("govPendingList");
+  if (!S.pollHub) {
+    allBox.innerHTML = pendingBox.innerHTML = `<div class="empty">Contratto non disponibile.</div>`;
     return;
   }
-  deck.innerHTML = `<p class="deck-hint">Esprimiti sui sondaggi della community: trascina a destra per <b>approvare</b>, a sinistra per <b>disapprovare</b> (transazione on-chain). Come governo non voti.</p>
-    <div class="deck-stack" id="deckStack"></div>
-    <div class="deck-ctl">
-      <button class="btn deck-no" data-endorse="0">Disapprova</button>
-      <span id="deckPos"></span>
-      <button class="btn deck-yes" data-endorse="1">Approva</button>
-    </div>`;
-  deck.querySelectorAll("[data-endorse]").forEach((b) => b.onclick = () => endorseTop(b.dataset.endorse === "1"));
-  renderDeckTop();
-}
+  let n;
+  try { n = Number(await S.pollHub.petitionsCount()); } catch (e) {
+    allBox.innerHTML = pendingBox.innerHTML = `<div class="empty">Errore: ${reason(e)}</div>`;
+    return;
+  }
+  if (!n) {
+    allBox.innerHTML = pendingBox.innerHTML = `<div class="empty">Nessuna raccolta firme.</div>`;
+    return;
+  }
 
-function govBadge(end) {
-  if (!end || !end[0]) return "";
-  return end[1]
-    ? `<span class="gov-badge gov-badge--yes">Approvato dal governo</span>`
-    : `<span class="gov-badge gov-badge--no">Disapprovato dal governo</span>`;
-}
-
-function govPollCard(item) {
-  const { p, counts, end } = item;
-  const options = p.options.map((b) => ethers.decodeBytes32String(b));
-  const total = Number(p.totalVotes);
-  const opts = options.map((o, i) => {
-    const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
-    return `<div class="bar"><div class="bar__l"><span>${escapeHtml(o)}</span><b>${v} · ${pct}%</b></div>
-      <div class="bar__t"><div class="bar__f" style="width:${pct}%"></div></div></div>`;
-  }).join("");
-  const badge = p.won ? `<span class="won">VINTO</span>` : `<span class="prog-pill">${total} voti</span>`;
-  return `<article class="deck-card">
-    <div class="deck-ov deck-ov--yes"><span>APPROVA</span></div>
-    <div class="deck-ov deck-ov--no"><span>DISAPPROVA</span></div>
-    <div class="poll__head">${avatar(p.creator)}<span class="addr">${p.creator.slice(0, 6)}…${p.creator.slice(-4)}</span>
-      <span class="poll__stake">cauzione ${ethers.formatEther(p.stake)}Ξ</span>${badge}</div>
-    <h3 class="poll__q">${escapeHtml(p.question)}</h3>
-    <div class="bars">${opts}</div>
-    ${govBadge(end)}
-  </article>`;
-}
-
-// il governo si esprime on-chain (approva/disapprova) e si passa al prossimo
-async function endorseTop(approve) {
-  const item = GOV_DECK[GOV_I];
-  if (!item) return;
-  const ok = await tx(
-    S.pollHub.endorse(item.id, approve),
-    approve ? "Sondaggio approvato dal governo." : "Sondaggio disapprovato dal governo.",
-  );
-  if (ok) moveDeck(1);
-}
-
-function renderDeckTop() {
-  const stack = $("deckStack");
-  const pos = $("deckPos");
-  if (!stack) return;
-  if (GOV_I < 0) GOV_I = 0;
-  if (GOV_I >= GOV_DECK.length) { stack.innerHTML = `<div class="deck-empty">Hai visto tutti i sondaggi qualificati.</div>`; if (pos) pos.textContent = ""; return; }
-  if (pos) pos.textContent = `${GOV_I + 1} / ${GOV_DECK.length}`;
-  stack.innerHTML = govPollCard(GOV_DECK[GOV_I]);
-  attachSwipe(stack.firstElementChild);
-}
-
-function moveDeck(dir) {
-  GOV_I += dir;
-  if (GOV_I < 0) GOV_I = 0;
-  renderDeckTop();
-}
-
-// swipe destra/sinistra: trascina la carta oltre soglia → passa alla successiva/precedente
-function attachSwipe(card) {
-  if (!card) return;
-  let x0 = null, dx = 0;
-  const yes = card.querySelector(".deck-ov--yes");
-  const no = card.querySelector(".deck-ov--no");
-  card.onpointerdown = (e) => { x0 = e.clientX; dx = 0; card.style.transition = "none"; card.setPointerCapture(e.pointerId); };
-  card.onpointermove = (e) => {
-    if (x0 == null) return;
-    dx = e.clientX - x0;
-    card.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
-    // overlay stile Tinder: verde a destra (approva), rosso a sinistra (disapprova)
-    const t = Math.min(Math.abs(dx) / 130, 1);
-    if (yes) yes.style.opacity = dx > 0 ? t : 0;
-    if (no) no.style.opacity = dx < 0 ? t : 0;
-  };
-  card.onpointerup = async () => {
-    if (x0 == null) return;
-    const commit = Math.abs(dx) > 90;
-    const approve = dx > 0; // destra = approva, sinistra = disapprova
-    card.style.transition = "transform .25s, opacity .25s";
-    if (!commit) {
-      card.style.transform = ""; card.style.opacity = "1";
-      if (yes) yes.style.opacity = 0;
-      if (no) no.style.opacity = 0;
-      x0 = null; dx = 0; return;
+  let allCards = [];
+  let pendingCards = [];
+  
+  for (let id = n - 1; id >= 0; id--) {
+    const p = await S.pollHub.getPetition(id).catch(() => null);
+    if (!p) continue;
+    
+    // Tutti
+    allCards.push(govCardTemplate(id, p, false));
+    
+    // Da Approvare (>= MIN_VOTES) e non ancora decisa
+    if (Number(p.signatureCount) >= MIN_VOTES && !p.decided) {
+      pendingCards.push(govCardTemplate(id, p, true));
     }
-    card.style.transform = `translateX(${approve ? 680 : -680}px) rotate(${approve ? 22 : -22}deg)`;
-    card.style.opacity = "0";
-    x0 = null; dx = 0;
-    const item = GOV_DECK[GOV_I];
-    const ok = await tx(
-      S.pollHub.endorse(item.id, approve),
-      approve ? "Sondaggio approvato dal governo." : "Sondaggio disapprovato dal governo.",
-    );
-    if (ok) moveDeck(1); else renderDeckTop(); // se la tx fallisce/rifiutata, ripristina la carta
-  };
+  }
+
+  allBox.innerHTML = allCards.length ? allCards.join("") : `<div class="empty">Nessuna raccolta presente.</div>`;
+  pendingBox.innerHTML = pendingCards.length ? pendingCards.join("") : `<div class="empty">Nessuna raccolta da approvare.</div>`;
+  
+  document.querySelectorAll("[data-approve]").forEach(b => b.onclick = async () => {
+    const ok = await tx(S.pollHub.decide(Number(b.dataset.approve), true), "Petizione approvata.");
+    if(ok) renderGovLists();
+  });
+  document.querySelectorAll("[data-reject]").forEach(b => b.onclick = async () => {
+    const ok = await tx(S.pollHub.decide(Number(b.dataset.reject), false), "Petizione respinta.");
+    if(ok) renderGovLists();
+  });
+}
+
+function govCardTemplate(id, p, isActionable) {
+  let badge = "", actions = "";
+  if (p.decided) {
+    badge = p.approved ? `<span class="won">APPROVATA</span>` : `<span class="pill">Respinta</span>`;
+  } else {
+    badge = `<span class="prog-pill">${p.signatureCount} firme</span>`;
+  }
+  
+  if (isActionable) {
+    actions = `<div style="margin-top:1rem;display:flex;gap:10px;">
+      <button class="btn btn--sm btn--gov" data-approve="${id}">Approva</button>
+      <button class="btn btn--sm" data-reject="${id}">Respingi</button>
+    </div>`;
+  }
+  
+  return `<article class="poll">
+    <div class="poll__head">${avatar(p.creator)}<span class="addr">${p.creator.slice(0, 6)}…${p.creator.slice(-4)}</span>
+    <span class="poll__stake">cauzione ${ethers.formatEther(p.stake)}Ξ</span>${badge}</div>
+    <h3 class="poll__q">${escapeHtml(p.title)}</h3>
+    <p style="margin-bottom:1rem;font-size:0.95rem;">${escapeHtml(p.description)}</p>
+    ${actions}
+  </article>`;
 }
 
 function renderChainGate() {
@@ -718,76 +675,75 @@ document.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = () => {
 }));
 
 $("createPoll").onclick = async () => {
-  if (!S.pollHub) return toast("Connetti il wallet su Sepolia (se manca, il gestore deve ridepoloyare con PollHub).", "err");
-  const q = $("pollQ").value.trim();
-  const opts = $("pollOpts").value.split("\n").map((s) => s.trim()).filter(Boolean);
-  if (!q || opts.length < 2) return toast("Domanda + almeno 2 opzioni.", "err");
-  if (opts.some((o) => o.length > 31)) return toast("Opzioni: max 31 caratteri.", "err");
+  if (!S.pollHub) return toast("Connetti il wallet su Sepolia.", "err");
+  const title = $("petitionTitle").value.trim();
+  const desc = $("petitionDesc").value.trim();
+  if (!title || !desc) return toast("Titolo e descrizione sono obbligatori.", "err");
   let value;
   try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
-  const b32 = opts.map((o) => ethers.encodeBytes32String(o));
-  const ok = await tx(S.pollHub.createPoll(q, b32, { value }), "Sondaggio pubblicato.");
-  if (ok) { $("pollQ").value = ""; $("pollOpts").value = ""; closeSheet(); await renderPolls(); }
+  
+  const ok = await tx(S.pollHub.createPetition(title, desc, { value }), "Raccolta firme pubblicata.");
+  if (ok) { $("petitionTitle").value = ""; $("petitionDesc").value = ""; closeSheet(); await renderPolls(); }
 };
 
 async function renderPolls() {
   const feed = $("pollFeed");
-  if (!S.pollHub) { feed.innerHTML = `<div class="empty">Sondaggi non disponibili su questa rete: il gestore deve ridepoloyare il sistema (con PollHub).</div>`; return; }
+  if (!S.pollHub) { feed.innerHTML = `<div class="empty">Contratto non disponibile.</div>`; return; }
   let n;
-  try { n = Number(await S.pollHub.pollsCount()); } catch (e) { feed.innerHTML = `<div class="empty">Errore: ${reason(e)}</div>`; return; }
-  if (!n) { feed.innerHTML = `<div class="empty">Ancora nessun sondaggio. Creane uno con il "+" in basso.</div>`; return; }
+  try { n = Number(await S.pollHub.petitionsCount()); } catch (e) { feed.innerHTML = `<div class="empty">Errore: ${reason(e)}</div>`; return; }
+  if (!n) { feed.innerHTML = `<div class="empty">Nessuna raccolta firme. Creane una con il "+" in basso.</div>`; return; }
+  
   const ids = [...Array(n).keys()].reverse(); // più recenti in cima
   feed.innerHTML = (await Promise.all(ids.map(pollCard))).join("");
   wirePolls();
 }
 
 async function pollCard(id) {
-  const p = await S.pollHub.getPoll(id);
-  const creator = p.creator, question = p.question, optsRaw = p.options;
-  const stake = p.stake, total = Number(p.totalVotes);
-  const won = p.won, claimed = p.claimed;
-  const options = optsRaw.map((b) => ethers.decodeBytes32String(b));
-  const voted = await S.pollHub.hasVoted(id, S.account).catch(() => false);
+  const p = await S.pollHub.getPetition(id);
+  const creator = p.creator, title = p.title, desc = p.description;
+  const stake = p.stake, total = Number(p.signatureCount);
+  const approved = p.approved, decided = p.decided, claimed = p.claimed;
+  
+  const hasSigned = await S.pollHub.hasSignedPetition(id, S.account).catch(() => false);
   const isCreator = S.account && creator.toLowerCase() === S.account.toLowerCase();
-  const counts = (await Promise.all(optsRaw.map((o) => S.pollHub.optionVotes(id, o)))).map(Number);
-  const end = await S.pollHub.endorsement(id).catch(() => null);
 
-  const opts = options.map((o, i) => {
-    const v = counts[i], pct = total ? Math.round((100 * v) / total) : 0;
-    const dis = (voted || isCreator) ? "disabled" : "";
-    return `<button class="poll-opt" data-pid="${id}" data-opt="${escapeHtml(o)}" ${dis}>
-      <span class="poll-opt__l"><b>${escapeHtml(o)}</b><i>${v}${total ? ` · ${pct}%` : ""}</i></span>
-      <span class="poll-opt__bar"><span style="width:${pct}%"></span></span></button>`;
-  }).join("");
-
-  // significatività: serve total>=5 e (primo-secondo) > 2·√total
-  const sorted = [...counts].sort((a, b) => b - a);
-  const lead = (sorted[0] || 0) - (sorted[1] || 0);
-  const needLead = Math.floor(2 * Math.sqrt(total)) + 1;
   let prog, progLabel;
-  if (won) { prog = 100; progLabel = "risultato statisticamente significativo"; }
-  else if (total < 5) { prog = Math.round((100 * total) / 5); progLabel = `${total}/5 voti minimi`; }
-  else { prog = Math.min(100, Math.round((100 * lead) / needLead)); progLabel = `vantaggio ${lead}/${needLead} per vincere (≈95%)`; }
-  const badge = won ? `<span class="won">VINTO</span>` : `<span class="prog-pill">${total} voti</span>`;
+  if (decided) {
+    prog = 100;
+    progLabel = approved ? "Approvata dal governo" : "Respinta dal governo";
+  } else {
+    prog = Math.min(100, Math.round((100 * total) / MIN_VOTES));
+    progLabel = total >= MIN_VOTES ? `In attesa di decisione` : `${total}/${MIN_VOTES} firme minime`;
+  }
+  
+  let badge = "";
+  if (decided) badge = approved ? `<span class="won">APPROVATA</span>` : `<span class="pill">Respinta</span>`;
+  else badge = `<span class="prog-pill">${total} firme</span>`;
+  
   let claim = "";
-  if (isCreator && won && !claimed) claim = `<button class="btn btn--social poll-claim" data-claim="${id}">Reclama cauzione (${ethers.formatEther(stake)} ETH)</button>`;
-  else if (isCreator && claimed) claim = `<span class="muted">cauzione riscattata</span>`;
-  const tags = `${isCreator ? '<span class="pill">tuo</span>' : ""}${voted ? '<span class="pill pill--ok">hai votato</span>' : ""}`;
+  if (isCreator && decided && approved && !claimed) {
+    claim = `<button class="btn btn--social poll-claim" data-claim="${id}">Reclama cauzione (${ethers.formatEther(stake)} ETH)</button>`;
+  } else if (isCreator && claimed) {
+    claim = `<span class="muted" style="display:block;margin-top:10px;">cauzione riscattata</span>`;
+  }
+  
+  const tags = `${isCreator ? '<span class="pill">tua</span>' : ""}${hasSigned ? '<span class="pill pill--ok">hai firmato</span>' : ""}`;
+  const dis = (hasSigned || decided) ? "disabled" : "";
+  const signBtn = `<button class="btn btn--primary" style="width:100%;margin-top:1rem;" data-pid="${id}" ${dis}>${hasSigned ? 'Hai già firmato' : 'Firma con Wallet'}</button>`;
 
   return `<article class="poll">
     <div class="poll__head">${avatar(creator)}<span class="addr">${creator.slice(0, 6)}…${creator.slice(-4)}</span>${tags}<span class="poll__stake">cauzione ${ethers.formatEther(stake)}Ξ</span>${badge}</div>
-    <h3 class="poll__q">${escapeHtml(question)}</h3>
-    ${govBadge(end)}
-    <div class="poll__opts">${opts}</div>
+    <h3 class="poll__q">${escapeHtml(title)}</h3>
+    <p style="margin-bottom:1rem;font-size:0.95rem;">${escapeHtml(desc)}</p>
     <div class="poll__prog"><div class="poll__progbar"><div style="width:${prog}%"></div></div><span>${progLabel}</span></div>
-    ${claim}
+    ${isCreator ? claim : signBtn}
   </article>`;
 }
 
 function wirePolls() {
-  document.querySelectorAll(".poll-opt:not([disabled])").forEach((b) => b.onclick = async () => {
-    const ok = await tx(S.pollHub.vote(Number(b.dataset.pid), ethers.encodeBytes32String(b.dataset.opt)), "Voto registrato.");
+  document.querySelectorAll("[data-pid]:not([disabled])").forEach((b) => b.onclick = async () => {
+    const ok = await tx(S.pollHub.sign(Number(b.dataset.pid)), "Firma registrata con successo.");
     if (ok) await renderPolls();
   });
   document.querySelectorAll("[data-claim]").forEach((b) => b.onclick = async () => {

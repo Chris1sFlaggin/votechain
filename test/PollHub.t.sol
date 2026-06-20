@@ -6,14 +6,12 @@ import {PollHub} from "../src/social/PollHub.sol";
 import {SPIDWalletRouter} from "../src/auth/SPIDWalletRouter.sol";
 import {Errors} from "../src/utils/Errors.sol";
 
-/// Sondaggi social: cauzione + vittoria per significatività statistica + rimborso + endorsement governo.
+/// Sondaggi social: cauzione + raccolta firme + rimborso se approvato dal governo.
 contract PollHubTest is Test {
     PollHub hub;
     SPIDWalletRouter router;
     address creator = makeAddr("creator");
     address gov = makeAddr("gov");
-    bytes32 constant SI = bytes32("si");
-    bytes32 constant NO = bytes32("no");
 
     function setUp() public {
         router = new SPIDWalletRouter(); // this test = ADMIN
@@ -22,112 +20,112 @@ contract PollHubTest is Test {
         vm.deal(creator, 1 ether);
     }
 
-    function test_endorseOnlyGovernment() public {
+    function test_decideOnlyGovernment() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
         vm.prank(makeAddr("rando"));
         vm.expectRevert(Errors.NotGovernment.selector);
-        hub.endorse(id, true);
+        hub.decide(id, true);
     }
 
-    function test_endorseBelowMinReverts() public {
+    function test_decideBelowMinReverts() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
-        _voteN(id, SI, 4, 1); // 4 < MIN_VOTES(5)
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
+        _signN(id, 4, 1); // 4 < MIN_SIGNATURES(5)
         vm.prank(gov);
         vm.expectRevert(Errors.BelowMinVotes.selector);
-        hub.endorse(id, true);
+        hub.decide(id, true);
     }
 
-    function test_governmentEndorsement() public {
+    function test_governmentDecision() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
-        _voteN(id, SI, 5, 1); // supera il minimo
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
+        _signN(id, 5, 1); // supera il minimo
         vm.prank(gov);
-        hub.endorse(id, true);
-        (bool set, bool approve, address by) = hub.endorsement(id);
-        assertTrue(set);
-        assertTrue(approve);
+        hub.decide(id, true);
+        (bool decided, bool approved, address by) = hub.decision(id);
+        assertTrue(decided);
+        assertTrue(approved);
         assertEq(by, gov);
-        // il governo può cambiare in disapprovazione
+        // il governo *può* cambiare idea finché non è reclamato
         vm.prank(gov);
-        hub.endorse(id, false);
-        (, bool approve2,) = hub.endorsement(id);
-        assertFalse(approve2);
+        hub.decide(id, false);
+        (, bool approved2,) = hub.decision(id);
+        assertFalse(approved2);
     }
 
-    function _opts() internal pure returns (bytes32[] memory o) {
-        o = new bytes32[](2);
-        o[0] = SI;
-        o[1] = NO;
-    }
-
-    // vota `n` opzioni `opt` da `n` indirizzi distinti (seed per evitare collisioni)
-    function _voteN(uint256 id, bytes32 opt, uint256 n, uint256 seed) internal {
+    // firma `n` volte da `n` indirizzi distinti (seed per evitare collisioni)
+    function _signN(uint256 id, uint256 n, uint256 seed) internal {
         for (uint256 i; i < n; i++) {
             address v = makeAddr(string.concat("v", vm.toString(seed + i)));
             vm.prank(v);
-            hub.vote(id, opt);
+            hub.sign(id);
         }
     }
 
     function test_createRequiresStake() public {
         vm.prank(creator);
         vm.expectRevert(Errors.BadPoll.selector);
-        hub.createPoll("Q", _opts()); // nessuna cauzione
+        hub.createPetition("Titolo", "Desc"); // nessuna cauzione
     }
 
-    function test_winsOnStatisticalSignificance() public {
+    function test_winsOnApproval() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 0.01 ether}("Pizza o pasta?", _opts());
+        uint256 id = hub.createPetition{value: 0.01 ether}("Petizione", "Descrizione petizione");
 
-        _voteN(id, SI, 4, 1); // 4-0 ma total 4 < MIN_VOTES(5) -> non vince
-        (,,,,, bool won4,) = hub.getPoll(id);
-        assertFalse(won4);
+        _signN(id, 5, 1);
+        (,,,,,, bool decided,) = hub.getPetition(id);
+        assertFalse(decided);
 
-        _voteN(id, SI, 1, 100); // 5° voto: 5-0, lead 5, 25 > 4*5=20 -> vince
-        (,,, uint128 stake, uint64 total, bool won5,) = hub.getPoll(id);
-        assertEq(total, 5);
-        assertTrue(won5);
+        vm.prank(gov);
+        hub.decide(id, true);
+        (,,,,,, bool decided2,) = hub.getPetition(id);
+        assertTrue(decided2);
 
         uint256 bal = creator.balance;
         vm.prank(creator);
         hub.claim(id);
-        assertEq(creator.balance, bal + stake); // cauzione restituita
+        assertEq(creator.balance, bal + 0.01 ether); // cauzione restituita
     }
 
-    function test_notSignificantNoWin() public {
+    function test_notApprovedNoClaim() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
-        _voteN(id, SI, 3, 1);
-        _voteN(id, NO, 2, 50); // 3-2, total 5, lead 1, 1 > 20? no -> non vince
-        (,,,,, bool won,) = hub.getPoll(id);
-        assertFalse(won);
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
+        _signN(id, 5, 1);
+        
+        vm.prank(gov);
+        hub.decide(id, false); // RESPINTA
+        (,,,,, bool approved, bool decided,) = hub.getPetition(id);
+        assertTrue(decided);
+        assertFalse(approved);
+        
         vm.prank(creator);
-        vm.expectRevert(Errors.PollNotWon.selector);
+        vm.expectRevert(Errors.PollNotWon.selector); // non approvata
         hub.claim(id);
     }
 
-    function test_noDoubleVote() public {
+    function test_noDoubleSign() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
         address v = makeAddr("dv");
         vm.prank(v);
-        hub.vote(id, SI);
+        hub.sign(id);
         vm.prank(v);
         vm.expectRevert(Errors.AlreadyVoted.selector);
-        hub.vote(id, NO);
+        hub.sign(id);
     }
 
-    function test_claimOnlyCreatorAndWon() public {
+    function test_claimOnlyCreatorAndApproved() public {
         vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
 
         vm.prank(creator);
         vm.expectRevert(Errors.PollNotWon.selector);
-        hub.claim(id); // non ancora vinto
+        hub.claim(id); // non ancora decisa
 
-        _voteN(id, SI, 5, 1); // 5-0 -> vince
+        _signN(id, 5, 1); // 5-0 -> approvabile
+        vm.prank(gov);
+        hub.decide(id, true);
 
         address other = makeAddr("other");
         vm.prank(other);
@@ -139,14 +137,5 @@ contract PollHubTest is Test {
         vm.prank(creator);
         vm.expectRevert(Errors.AlreadyClaimed.selector);
         hub.claim(id);
-    }
-
-    function test_unknownOption() public {
-        vm.prank(creator);
-        uint256 id = hub.createPoll{value: 1 wei}("Q", _opts());
-        address v = makeAddr("u");
-        vm.prank(v);
-        vm.expectRevert(Errors.UnknownOption.selector);
-        hub.vote(id, bytes32("xx"));
     }
 }

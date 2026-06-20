@@ -107,13 +107,23 @@
     <!-- ============================================================ SOCIAL -->
     <div id="socialView" class="social">
       <section class="social-hero" id="socialHero">
-        <h1>La community vota</h1>
-        <p>Sondaggi aperti a tutti: metti una piccola <b>cauzione</b>, la riprendi se il tuo sondaggio diventa <b>significativo</b>. Niente SPID. Usa il "+" in basso per crearne uno.</p>
+        <h1>Raccolta Firme Social</h1>
+        <p>Petizioni aperte a tutti: metti una piccola <b>cauzione</b>, la riprendi se la raccolta supera le 5 firme e viene <b>approvata dal governo</b>. Autenticati e firma!</p>
         <button id="connectSocial" class="btn btn--social btn--xl">Connetti wallet</button>
       </section>
 
+      <!-- Vista cittadini -->
       <div id="pollFeed" class="poll-feed"></div>
-      <div id="govDeck" class="deck hidden"></div>
+
+      <!-- Vista governo (2 sezioni) -->
+      <div id="govAreaSocial" class="hidden">
+        <div class="gov-tabs">
+          <button class="btn btn--secondary" id="govTabAll">Tutte le raccolte</button>
+          <button class="btn btn--primary" id="govTabPending">Raccolte da approvare (≥5 firme)</button>
+        </div>
+        <div id="govAllList" class="poll-feed hidden"></div>
+        <div id="govPendingList" class="poll-feed hidden"></div>
+      </div>
     </div>
 
   </main>
@@ -133,12 +143,12 @@
   <div id="pollSheet" class="poll-sheet">
     <div class="poll-sheet__panel">
       <div class="poll-sheet__grab"></div>
-      <h2>Crea un sondaggio</h2>
-      <label class="field"><span>Domanda</span><input id="pollQ" placeholder="Es. Pizza o Pasta?" autocomplete="off"></label>
-      <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="pollOpts" rows="3" placeholder="Pizza&#10;Pasta"></textarea></label>
+      <h2>Crea raccolta firme</h2>
+      <label class="field"><span>Titolo</span><input id="petitionTitle" placeholder="Titolo della petizione" autocomplete="off"></label>
+      <label class="field"><span>Descrizione</span><textarea id="petitionDesc" rows="3" placeholder="Motivo della tua petizione"></textarea></label>
       <label class="field"><span>Cauzione (ETH di test)</span><input id="pollStake" type="number" min="0" step="0.001" value="0.001"></label>
-      <button id="createPoll" class="btn btn--social btn--xl">Pubblica sondaggio</button>
-      <p class="note">Il sondaggio <b>vince</b> quando è <b>statisticamente significativo</b> (≥5 voti e vantaggio &gt; 2·√voti, ≈95%). Se vince riprendi la cauzione, altrimenti resta bloccata (anti-spam).</p>
+      <button id="createPoll" class="btn btn--social btn--xl">Pubblica raccolta</button>
+      <p class="note">La raccolta può essere esaminata dal governo solo se raggiunge almeno <b>5 firme</b>. Se approvata, riprendi la cauzione, altrimenti resta bloccata (anti-spam).</p>
     </div>
   </div>
 

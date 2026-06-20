@@ -4,113 +4,108 @@ pragma solidity ^0.8.20;
 import {Errors} from "../utils/Errors.sol";
 import {SPIDWalletRouter} from "../auth/SPIDWalletRouter.sol";
 
-/// @title PollHub — sondaggi "social" aperti a tutti (lato non istituzionale).
-/// @notice Chiunque crea un sondaggio depositando una **cauzione** (stake). Chiunque
-///         vota una volta sola. Il sondaggio "vince" quando il risultato è
-///         **statisticamente significativo**: la soglia NON è scelta dal creatore ma
-///         calcolata dal contratto secondo l'errore standard.
-///
-///         Regola (≈95% di confidenza, 2 errori standard, su n = voti totali):
-///             vince  ⇔  n ≥ MIN_VOTES  e  (primo − secondo) > 2·√n
-///         Per evitare la radice on-chain si confronta al quadrato:
-///             (primo − secondo)² > 4·n
-///
-///         Quando vince, il creatore riprende la cauzione (claim). Se non raggiunge
-///         mai la significatività, la cauzione resta bloccata (anti-spam). Nessuna
-///         identità/SPID/giurisdizione: parte aperta e social.
+/// @title PollHub — raccolta firme social (petizioni).
+/// @notice Chiunque crea una raccolta firme depositando una **cauzione** (stake anti-spam).
+///         I cittadini firmano una sola volta (autenticazione via wallet).
+///         Nessun voto su opzioni: è una petizione unica (sì/firma).
+///         Se si superano **MIN_SIGNATURES** (5 per PoC), la raccolta diventa "approvabile"
+///         dal governo. Il governo vede DUE liste:
+///           1. Tutte le raccolte firme (anche sotto soglia)
+///           2. Raccolte firme con ≥ MIN_SIGNATURES → può approvare o respingere.
+///         Se approvata, il creatore riprende la cauzione; se respinta, la cauzione resta bloccata.
+///         Nessuna identità/SPID/giurisdizione: parte aperta e social.
 contract PollHub {
-    uint64 public constant MIN_VOTES = 5; // campione minimo perché un test sia sensato
+    uint64 public constant MIN_SIGNATURES = 5; // soglia minima firme per essere approvabile (PoC)
 
-    struct Poll {
+    struct Petition {
         address creator;
-        string question;
-        bytes32[] options;
+        string title;
+        string description;
         uint128 stake; // cauzione del creatore (wei)
-        uint64 totalVotes;
-        bool won;
-        bool claimed;
+        uint64 signatureCount;
+        bool approved;   // true = approvata, false = respinta
+        bool decided;    // true se il governo ha deciso (approvato o respinto)
+        bool claimed;    // true se la cauzione è stata reclamata (solo se approvata)
     }
 
-    /// @notice Posizione (endorsement) del governo su un sondaggio: approva/disapprova.
-    struct Gov {
-        bool set;
-        bool approve;
+    /// @notice Decisione del governo su una raccolta firme.
+    struct GovDecision {
+        bool decided;
+        bool approved;
         address by;
     }
 
-    Poll[] private _polls; // pollId = indice
-    mapping(uint256 => mapping(bytes32 => uint256)) public votesOf; // pollId => opzione => conteggio
-    mapping(uint256 => mapping(address => bool)) public hasVoted; // pollId => votante => bool
-    mapping(uint256 => Gov) private _gov; // pollId => endorsement del governo
+    Petition[] private _petitions; // petitionId = indice
+    mapping(uint256 => mapping(address => bool)) public hasSigned; // petitionId => firmatario => bool
+    mapping(uint256 => GovDecision) private _govDecisions; // petitionId => decisione governo
 
     SPIDWalletRouter public immutable router; // per sapere chi è "governo" (isAuthority)
 
-    event PollCreated(uint256 indexed id, address indexed creator, string question, uint128 stake);
-    event Voted(uint256 indexed id, address indexed voter, bytes32 option, uint64 totalVotes);
-    event PollWon(uint256 indexed id);
+    event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake);
+    event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures);
+    event PetitionDecided(uint256 indexed id, address indexed government, bool approved);
     event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount);
-    event Endorsed(uint256 indexed id, address indexed government, bool approve);
 
     constructor(SPIDWalletRouter _router) {
         router = _router;
     }
 
-    /// @notice Il GOVERNO (qualsiasi giurisdizione) esprime approvazione/disapprovazione
-    ///         su un sondaggio. È una transazione on-chain; può cambiare idea (ultima vale).
+    // ------------------------------------------------------------ GOVERNO
+    /// @notice Il GOVERNO (qualsiasi giurisdizione) approva o respinge una raccolta firme
+    ///         che ha raggiunto MIN_SIGNATURES. È una transazione on-chain; può cambiare idea
+    ///         (l'ultima decide) finché non viene reclamata la cauzione.
     ///         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain).
-    function endorse(uint256 id, bool approve) external {
-        Poll storage p = _polls[id];
+    function decide(uint256 id, bool approve) external {
+        Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert Errors.BadPoll();
         if (!router.isAuthority(msg.sender)) revert Errors.NotGovernment();
-        if (p.totalVotes < MIN_VOTES) revert Errors.BelowMinVotes(); // solo sondaggi oltre il minimo
-        _gov[id] = Gov(true, approve, msg.sender);
-        emit Endorsed(id, msg.sender, approve);
+        if (p.signatureCount < MIN_SIGNATURES) revert Errors.BelowMinVotes(); // riutilizzo errore: "sotto soglia minima"
+
+        _govDecisions[id] = GovDecision(true, approve, msg.sender);
+        p.approved = approve;
+        p.decided = true;
+        emit PetitionDecided(id, msg.sender, approve);
     }
 
-    /// @notice Endorsement del governo su un sondaggio (se presente).
-    function endorsement(uint256 id) external view returns (bool set, bool approve, address by) {
-        Gov storage g = _gov[id];
-        return (g.set, g.approve, g.by);
+    /// @notice Decisione del governo su una raccolta firme (se presente).
+    function decision(uint256 id) external view returns (bool decided, bool approved, address by) {
+        GovDecision storage g = _govDecisions[id];
+        return (g.decided, g.approved, g.by);
     }
 
-    /// @notice Crea un sondaggio depositando la cauzione (msg.value). Nessuna soglia.
-    function createPoll(string calldata question, bytes32[] calldata options) external payable returns (uint256 id) {
-        if (options.length < 2 || msg.value == 0 || bytes(question).length == 0) revert Errors.BadPoll();
-        id = _polls.length;
-        Poll storage p = _polls.push();
+    // ------------------------------------------------------------ CITTADINI / CREATORI
+    /// @notice Crea una raccolta firme depositando la cauzione (msg.value).
+    ///         Non servono opzioni: è una petizione unica (si firma o no).
+    function createPetition(string calldata title, string calldata description) external payable returns (uint256 id) {
+        if (bytes(title).length == 0 || bytes(description).length == 0 || msg.value == 0) revert Errors.BadPoll();
+        id = _petitions.length;
+        Petition storage p = _petitions.push();
         p.creator = msg.sender;
-        p.question = question;
-        p.options = options;
+        p.title = title;
+        p.description = description;
         p.stake = uint128(msg.value);
-        emit PollCreated(id, msg.sender, question, p.stake);
+        emit PetitionCreated(id, msg.sender, title, p.stake);
     }
 
-    /// @notice Vota un'opzione (una sola volta per indirizzo).
-    function vote(uint256 id, bytes32 option) external {
-        Poll storage p = _polls[id];
+    /// @notice Firma una raccolta firme (una sola volta per indirizzo).
+    ///         Non ci sono opzioni: la firma è unica per petizione.
+    function sign(uint256 id) external {
+        Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert Errors.BadPoll();
-        if (hasVoted[id][msg.sender]) revert Errors.AlreadyVoted();
-        if (!_isOption(p, option)) revert Errors.UnknownOption();
+        if (hasSigned[id][msg.sender]) revert Errors.AlreadyVoted(); // riutilizzo: "già firmato"
+        if (p.decided) revert Errors.PollNotWon(); // riutilizzo: "petizione già decisa, non si può più firmare"
 
-        hasVoted[id][msg.sender] = true;
-        votesOf[id][option] += 1;
-        p.totalVotes += 1;
-        emit Voted(id, msg.sender, option, p.totalVotes);
-
-        if (!p.won) {
-            (uint256 top, uint256 second) = _topTwo(id, p);
-            if (_significant(top, second, p.totalVotes)) {
-                p.won = true;
-                emit PollWon(id);
-            }
-        }
+        hasSigned[id][msg.sender] = true;
+        p.signatureCount += 1;
+        emit Signed(id, msg.sender, p.signatureCount);
     }
 
-    /// @notice Il creatore riprende la cauzione SE il sondaggio ha vinto.
+    /// @notice Il creatore riprende la cauzione SE la raccolta è stata APPROVATA dal governo.
     function claim(uint256 id) external {
-        Poll storage p = _polls[id];
+        Petition storage p = _petitions[id];
         if (msg.sender != p.creator) revert Errors.NotCreator();
-        if (!p.won) revert Errors.PollNotWon();
+        if (!p.decided) revert Errors.PollNotWon(); // non ancora decisa
+        if (!p.approved) revert Errors.PollNotWon(); // respinta
         if (p.claimed) revert Errors.AlreadyClaimed();
         p.claimed = true; // checks-effects-interactions
         uint128 amt = p.stake;
@@ -119,63 +114,38 @@ contract PollHub {
         emit StakeClaimed(id, p.creator, amt);
     }
 
-    // --------------------------------------------------------------- math (win)
-    /// @dev Significatività statistica: n ≥ MIN_VOTES e (top−second) > 2·√n  ⇔  (top−second)² > 4·n.
-    function _significant(uint256 top, uint256 second, uint64 total) internal pure returns (bool) {
-        if (total < MIN_VOTES) return false;
-        uint256 lead = top - second;
-        return lead * lead > 4 * uint256(total);
+    // ------------------------------------------------------------ VIEWS
+    function petitionsCount() external view returns (uint256) {
+        return _petitions.length;
     }
 
-    function _topTwo(uint256 id, Poll storage p) internal view returns (uint256 top, uint256 second) {
-        for (uint256 i; i < p.options.length; ++i) {
-            uint256 c = votesOf[id][p.options[i]];
-            if (c >= top) {
-                second = top;
-                top = c;
-            } else if (c > second) {
-                second = c;
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------- views
-    function pollsCount() external view returns (uint256) {
-        return _polls.length;
-    }
-
-    function getPoll(uint256 id)
+    function getPetition(uint256 id)
         external
         view
         returns (
             address creator,
-            string memory question,
-            bytes32[] memory options,
+            string memory title,
+            string memory description,
             uint128 stake,
-            uint64 totalVotes,
-            bool won,
+            uint64 signatureCount,
+            bool approved,
+            bool decided,
             bool claimed
         )
     {
-        Poll storage p = _polls[id];
-        return (p.creator, p.question, p.options, p.stake, p.totalVotes, p.won, p.claimed);
+        Petition storage p = _petitions[id];
+        return (p.creator, p.title, p.description, p.stake, p.signatureCount, p.approved, p.decided, p.claimed);
     }
 
-    function optionVotes(uint256 id, bytes32 option) external view returns (uint256) {
-        return votesOf[id][option];
+    /// @notice Verifica se un indirizzo ha firmato una petizione.
+    function hasSignedPetition(uint256 id, address signer) external view returns (bool) {
+        return hasSigned[id][signer];
     }
 
-    /// @notice Stato per la UI: voti primo/secondo, totale, e se ha vinto.
-    function standing(uint256 id) external view returns (uint256 top, uint256 second, uint64 total, bool won) {
-        Poll storage p = _polls[id];
-        (top, second) = _topTwo(id, p);
-        return (top, second, p.totalVotes, p.won);
-    }
-
-    function _isOption(Poll storage p, bytes32 o) internal view returns (bool) {
-        for (uint256 i; i < p.options.length; ++i) {
-            if (p.options[i] == o) return true;
-        }
-        return false;
+    /// @notice Restituisce l'elenco dei firmatari (per trasparenza, gas permitting).
+    ///         Nota: per petizioni con molti firmatari può costare gas.
+    function getSigners(uint256 id) external view returns (address[] memory) {
+        // Non implementato on-chain per efficienza; il frontend può indicizzare dagli eventi Signed.
+        return new address[](0);
     }
 }
