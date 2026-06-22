@@ -45,6 +45,7 @@ const S = { provider: null, signer: null, account: null, factory: null, pollHub:
 const ADDR = { factory: "", pollHub: "" };
 let IS_GOV = false;
 let GOV_ADDR = "";
+let IS_POLL_GOV = false;
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
@@ -153,8 +154,6 @@ function gateAreas() {
   }
 }
 
-// L'identità SPID NON è più globale: si crea per-referendum, dal riquadro di ciascun
-// referendum (vedi card()/wireCards). Niente login SPID globale qui.
 
 // ----------------------------------------------------------------- governo
 $("createRef").onclick = async () => {
@@ -475,14 +474,22 @@ const MIN_VOTES = 5; // soglia minima di voti perché un sondaggio "conti" (sign
 
 // Social: il governo vede le due pagine (Tutte le raccolte, e Da Approvare).
 // I cittadini vedono il feed delle raccolte firme e possono firmare.
-function renderSocial() {
+async function renderSocial() {
   const connected = !!(S.account && S.pollHub);
+  if (connected) {
+    try {
+      const pg = await S.pollHub.government();
+      IS_POLL_GOV = !!pg && pg.toLowerCase() === S.account.toLowerCase();
+    } catch { IS_POLL_GOV = false; }
+  } else {
+    IS_POLL_GOV = false;
+  }
   $("socialHero").classList.toggle("hidden", connected);
-  $("pollFeed").classList.toggle("hidden", connected && IS_GOV);
-  $("govAreaSocial").classList.toggle("hidden", !(connected && IS_GOV));
-  document.querySelector('[data-snav="create"]').classList.toggle("hidden", IS_GOV);
+  $("pollFeed").classList.toggle("hidden", connected && IS_POLL_GOV);
+  $("govAreaSocial").classList.toggle("hidden", !(connected && IS_POLL_GOV));
+  document.querySelector('[data-snav="create"]').classList.toggle("hidden", IS_POLL_GOV);
   if (!connected) return;
-  if (IS_GOV) {
+  if (IS_POLL_GOV) {
     if (!$("govTabPending").onclick) {
       $("govTabPending").onclick = () => { govShow("pending"); renderGovLists(); };
       $("govTabAll").onclick = () => { govShow("all"); renderGovLists(); };

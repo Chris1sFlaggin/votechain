@@ -38,7 +38,6 @@ em{font-style:normal;color:var(--mut);font-weight:400}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(16,24,42,.12)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .btn--primary{background:linear-gradient(135deg,var(--blue),#1e54d6);color:#fff;border:none}
-.btn--spid{background:linear-gradient(135deg,#0a66d6,#0aa);color:#fff;border:none}
 .btn--gov{background:linear-gradient(135deg,#1b3c6e,#0b1f3a);color:#fff;border:none}
 .btn--xl{padding:.85rem 1.4rem;font-size:1rem;border-radius:14px}
 .btn--sm{padding:.4rem .7rem;font-size:.84rem;border-radius:10px}
@@ -282,7 +281,7 @@ body[data-screen="social"] .empty,body[data-screen="social"] .muted{color:#9aa3b
 .ref-card--err{opacity:.7;border-color:#f0c0c0}
 .ref-card--err .ref-card__meta{color:#b04a4a;word-break:break-all}
 
-/* identità SPID per-referendum (finta) + riquadro creazione identità */
+/* identità per-referendum + riquadro creazione identità */
 .ident{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:.6rem 0;padding:.55rem .8rem;
   border:1px solid #cfe0fb;border-radius:12px;background:#eef5ff;color:#0a4ea3;font-size:.85rem;font-weight:600}
 .ident code{font-family:"IBM Plex Mono",monospace;background:#dcebff;padding:.05rem .4rem;border-radius:6px}
