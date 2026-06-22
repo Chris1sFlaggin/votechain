@@ -29,7 +29,12 @@ error EmptyOptions();
 ///                    la scheda; un nonce errato non conferma nulla (ritentabile).
 ///  PHASE 3 CLOSED  — close() conta, per wallet, il voto confermato.
 contract Referendum {
-    enum Phase { Setup, Voting, Tally, Closed }
+    enum Phase {
+        Setup,
+        Voting,
+        Tally,
+        Closed
+    }
 
     address public immutable government;
     string public title;
@@ -153,11 +158,25 @@ contract Referendum {
     }
 
     // ------------------------------------------------------------------------------- views
-    function getOptions() external view returns (bytes32[] memory) { return options; }
-    function getLabels() external view returns (string[] memory) { return _labels; }
-    function getVoters() external view returns (address[] memory) { return voters; }
-    function result(bytes32 option) external view returns (uint256) { return tally[option]; }
-    function votersCount() external view returns (uint256) { return voters.length; }
+    function getOptions() external view returns (bytes32[] memory) {
+        return options;
+    }
+
+    function getLabels() external view returns (string[] memory) {
+        return _labels;
+    }
+
+    function getVoters() external view returns (address[] memory) {
+        return voters;
+    }
+
+    function result(bytes32 option) external view returns (uint256) {
+        return tally[option];
+    }
+
+    function votersCount() external view returns (uint256) {
+        return voters.length;
+    }
 
     function isOption(bytes32 o) external view returns (bool) {
         for (uint256 i; i < options.length; ++i) {
@@ -197,6 +216,11 @@ contract GovFactory {
         return address(r);
     }
 
-    function getReferenda() external view returns (address[] memory) { return _referenda; }
-    function count() external view returns (uint256) { return _referenda.length; }
+    function getReferenda() external view returns (address[] memory) {
+        return _referenda;
+    }
+
+    function count() external view returns (uint256) {
+        return _referenda.length;
+    }
 }

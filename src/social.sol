@@ -76,11 +76,7 @@ contract PollHub {
 
     // ------------------------------------------------------------------ CITTADINI / CREATORI
     /// @notice Crea una raccolta firme depositando la cauzione (msg.value).
-    function createPetition(string calldata title, string calldata description)
-        external
-        payable
-        returns (uint256 id)
-    {
+    function createPetition(string calldata title, string calldata description) external payable returns (uint256 id) {
         if (bytes(title).length == 0 || bytes(description).length == 0 || msg.value == 0) revert BadPoll();
         id = _petitions.length;
         Petition storage p = _petitions.push();
@@ -117,7 +113,9 @@ contract PollHub {
     }
 
     // -------------------------------------------------------------------------------- VIEWS
-    function petitionsCount() external view returns (uint256) { return _petitions.length; }
+    function petitionsCount() external view returns (uint256) {
+        return _petitions.length;
+    }
 
     function getPetition(uint256 id)
         external
