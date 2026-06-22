@@ -2,46 +2,38 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {SPIDWalletRouter} from "../src/auth/SPIDWalletRouter.sol";
-import {GovFactory} from "../src/core/GovFactory.sol";
-import {Referendum} from "../src/core/Referendum.sol";
-import {IReferendum} from "../src/interfaces/IReferendum.sol";
-import {Errors} from "../src/utils/Errors.sol";
+import {
+    GovFactory,
+    Referendum,
+    NotGovernment,
+    GovernmentCannotVote,
+    VotingNotOpen,
+    RevealClosed,
+    CloseOnlyFromTally
+} from "../src/referendum.sol";
 
-/// Phases 1/2/3, geofencing, authorisation, nullification of votes.
+/// Fasi 1/2/3, voto aperto per wallet, nullificazione dei voti non confermati.
 contract ReferendumTest is Test {
-    SPIDWalletRouter router;
     GovFactory factory;
     Referendum ref;
 
-    address govIT = makeAddr("govIT");
-    address alice = makeAddr("alice"); // Italia
-    address bob = makeAddr("bob"); // Italia
-    address sara = makeAddr("sara"); // San Marino
+    address gov = makeAddr("gov"); // deployer della factory = governo
+    address alice = makeAddr("alice");
+    address bob = makeAddr("bob");
 
-    bytes32 SI; // id opzioni, letti dal referendum dopo la creazione (label != id)
+    bytes32 SI;
     bytes32 NO;
     bytes32 BIANCA;
 
     function setUp() public {
-        router = new SPIDWalletRouter(); // this test = ADMIN + ORACLE
-        factory = new GovFactory(router);
-        router.registerGovernment(govIT, "Italia");
-
-        vm.prank(govIT);
-        ref = Referendum(factory.createReferendum("Referendum Test", "Italia", _labels()));
+        vm.prank(gov);
+        factory = new GovFactory(); // gov = government
+        vm.prank(gov);
+        ref = Referendum(factory.createReferendum("Referendum Test", _labels()));
         bytes32[] memory o = ref.getOptions();
         SI = o[0];
         NO = o[1];
         BIANCA = o[2];
-
-        // voters self-enrol a (fake) SPID identity PER referendum (no CF on-chain)
-        vm.prank(alice);
-        router.simulatedSpidLogin(address(ref), "Italia");
-        vm.prank(bob);
-        router.simulatedSpidLogin(address(ref), "Italia");
-        vm.prank(sara);
-        router.simulatedSpidLogin(address(ref), "San Marino");
     }
 
     function _labels() internal pure returns (string[] memory a) {
@@ -56,26 +48,14 @@ contract ReferendumTest is Test {
     }
 
     function _nt(string memory n) internal pure returns (bytes32) {
-        return keccak256(bytes(n)); // impegno sul nonce, indipendente dal voto
-    }
-
-    function test_geofencing_outOfJurisdictionReverts() public {
-        vm.prank(sara);
-        vm.expectRevert(Errors.OutOfJurisdiction.selector);
-        ref.commit(_digest(SI, "x"), _nt("x"));
-    }
-
-    function test_unauthorizedWalletReverts() public {
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert(Errors.WalletNotAuthorized.selector);
-        ref.commit(_digest(SI, "x"), _nt("x"));
+        return keccak256(bytes(n));
     }
 
     function test_commitOnlyDuringVoting() public {
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
-        vm.expectRevert(Errors.VotingNotOpen.selector);
+        vm.expectRevert(VotingNotOpen.selector);
         ref.commit(_digest(SI, "x"), _nt("x"));
     }
 
@@ -89,34 +69,31 @@ contract ReferendumTest is Test {
         assertEq(ref.revisions(alice), 2);
     }
 
-    /// Reveal is NOT allowed while voting is open: no running tally can be built
-    /// before the spoglio (presidential-style secrecy).
     function test_revealBlockedDuringVoting() public {
         vm.prank(alice);
         ref.commit(_digest(SI, "an"), _nt("an"));
         vm.prank(alice);
-        vm.expectRevert(Errors.RevealClosed.selector);
+        vm.expectRevert(RevealClosed.selector);
         ref.reveal("an");
     }
 
-    /// Reveals happen only in Tally; last reveal per wallet wins; count at close.
     function test_tallyCountAfterReveal() public {
         vm.prank(alice);
         ref.commit(_digest(NO, "an"), _nt("an"));
         vm.prank(bob);
         ref.commit(_digest(SI, "bn"), _nt("bn"));
 
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
 
         vm.prank(alice);
-        ref.reveal("wrong"); // mismatch, still recorded in clear
+        ref.reveal("wrong"); // mismatch
         vm.prank(alice);
-        ref.reveal("an"); // correct (last reveal wins)
+        ref.reveal("an"); // corretto
         vm.prank(bob);
         ref.reveal("bn");
 
-        vm.prank(govIT);
+        vm.prank(gov);
         ref.close();
 
         assertEq(ref.result(NO), 1);
@@ -127,81 +104,58 @@ contract ReferendumTest is Test {
     function test_wrongNonceNotCounted() public {
         vm.prank(alice);
         ref.commit(_digest(SI, "good"), _nt("good"));
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
-        ref.reveal("bad"); // mismatch -> null
-        vm.prank(govIT);
+        ref.reveal("bad");
+        vm.prank(gov);
         ref.close();
         assertEq(ref.result(SI), 0);
     }
 
     function test_unrevealedIsNull() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "k"), _nt("k")); // committed, never revealed
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
-        vm.prank(govIT);
+        ref.commit(_digest(SI, "k"), _nt("k"));
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
+        vm.prank(gov);
         ref.close();
         assertEq(ref.result(SI), 0);
     }
 
     function test_onlyGovDrivesPhases() public {
         vm.prank(alice);
-        vm.expectRevert(Errors.NotGovernment.selector);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.expectRevert(NotGovernment.selector);
+        ref.setPhase(Referendum.Phase.Tally);
     }
 
     function test_closeOnlyFromTally() public {
-        vm.prank(govIT);
-        vm.expectRevert(Errors.CloseOnlyFromTally.selector);
-        ref.close(); // still in Voting
-    }
-
-    function test_govCannotCreateOutsideJurisdiction() public {
-        vm.prank(govIT);
-        vm.expectRevert(Errors.NotGovernment.selector);
-        factory.createReferendum("X", "San Marino", _labels());
+        vm.prank(gov);
+        vm.expectRevert(CloseOnlyFromTally.selector);
+        ref.close(); // ancora in Voting
     }
 
     function test_revealBlockedAfterClose() public {
         vm.prank(alice);
         ref.commit(_digest(SI, "z"), _nt("z"));
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
-        vm.prank(govIT);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
+        vm.prank(gov);
         ref.close();
         vm.prank(alice);
-        vm.expectRevert(Errors.RevealClosed.selector);
+        vm.expectRevert(RevealClosed.selector);
         ref.reveal("z");
     }
 
     function test_governmentCannotVote() public {
-        // even if the government enrols an SPID identity, it cannot commit a vote
-        vm.prank(govIT);
-        router.simulatedSpidLogin(address(ref), "Italia");
-        vm.prank(govIT);
-        vm.expectRevert(Errors.GovernmentCannotVote.selector);
+        vm.prank(gov);
+        vm.expectRevert(GovernmentCannotVote.selector);
         ref.commit(_digest(SI, "g"), _nt("g"));
     }
 
-    /// One identity per referendum: enrolling for `ref` does NOT authorise another
-    /// referendum, even in the same jurisdiction. You must create a fresh identity.
-    function test_identityIsPerReferendum() public {
-        vm.prank(govIT);
-        Referendum ref2 = Referendum(factory.createReferendum("Referendum 2", "Italia", _labels()));
-
-        // alice is enrolled for `ref` but never for `ref2`
+    function test_onlyGovernmentCreates() public {
         vm.prank(alice);
-        vm.expectRevert(Errors.WalletNotAuthorized.selector);
-        ref2.commit(_digest(SI, "x"), _nt("x"));
-
-        // a fresh identity for ref2 lets her vote there
-        vm.prank(alice);
-        router.simulatedSpidLogin(address(ref2), "Italia");
-        vm.prank(alice);
-        ref2.commit(_digest(SI, "x"), _nt("x"));
-        (, bool committed,,,) = ref2.ballots(alice);
-        assertTrue(committed);
+        vm.expectRevert(NotGovernment.selector);
+        factory.createReferendum("X", _labels());
     }
 }

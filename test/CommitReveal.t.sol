@@ -2,44 +2,31 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {SPIDWalletRouter} from "../src/auth/SPIDWalletRouter.sol";
-import {GovFactory} from "../src/core/GovFactory.sol";
-import {Referendum} from "../src/core/Referendum.sol";
-import {IReferendum} from "../src/interfaces/IReferendum.sol";
-import {VoteVerifier} from "../src/crypto/VoteVerifier.sol";
-import {Errors} from "../src/utils/Errors.sol";
+import {GovFactory, Referendum, NonceGiaUtilizzato, AlreadyRevealed} from "../src/referendum.sol";
 
-/// Hash collisions, nonce uniqueness and multi-reveal semantics.
+/// Collisioni di hash, unicità del nonce e semantica multi-reveal.
 contract CommitRevealTest is Test {
-    SPIDWalletRouter router;
     GovFactory factory;
     Referendum ref;
 
-    address govIT = makeAddr("govIT");
+    address gov = makeAddr("gov");
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
 
-    bytes32 SI; // id opzioni letti dal referendum (label != id)
+    bytes32 SI;
     bytes32 NO;
 
     function setUp() public {
-        router = new SPIDWalletRouter();
-        factory = new GovFactory(router);
-        router.registerGovernment(govIT, "Italia");
-
+        vm.prank(gov);
+        factory = new GovFactory();
         string[] memory labels = new string[](2);
         labels[0] = "si";
         labels[1] = "no";
-        vm.prank(govIT);
-        ref = Referendum(factory.createReferendum("R", "Italia", labels));
+        vm.prank(gov);
+        ref = Referendum(factory.createReferendum("R", labels));
         bytes32[] memory o = ref.getOptions();
         SI = o[0];
         NO = o[1];
-
-        vm.prank(alice);
-        router.simulatedSpidLogin(address(ref), "Italia");
-        vm.prank(bob);
-        router.simulatedSpidLogin(address(ref), "Italia");
     }
 
     function _d(bytes32 v, string memory n) internal pure returns (bytes32) {
@@ -47,102 +34,103 @@ contract CommitRevealTest is Test {
     }
 
     function _nt(string memory n) internal pure returns (bytes32) {
-        return keccak256(bytes(n)); // impegno sul nonce, indipendente dal voto
+        return keccak256(bytes(n));
     }
 
-    /// Nonce uniqueness is PER-WALLET: two different voters may use the same nonce
-    /// (it is only compared against the caller's own previous commits).
+    /// L'unicità del nonce è PER-WALLET: due votanti diversi possono usare lo stesso nonce.
     function test_sameNonceDifferentVotersAllowed() public {
         bytes32 d = _d(SI, "dup");
         vm.prank(alice);
         ref.commit(d, _nt("dup"));
         vm.prank(bob);
-        ref.commit(d, _nt("dup")); // stesso nonce, altro wallet -> consentito
+        ref.commit(d, _nt("dup"));
         (, bool aliceC,,,) = ref.ballots(alice);
         (, bool bobC,,,) = ref.ballots(bob);
         assertTrue(aliceC);
         assertTrue(bobC);
     }
 
-    /// Re-voting with the same nonce is rejected (must pick a fresh nonce).
+    /// Stesso votante, stesso nonce -> rifiutato.
     function test_reusedNonceBySameVoterRejected() public {
         vm.startPrank(alice);
         ref.commit(_d(SI, "n"), _nt("n"));
-        vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
-        ref.commit(_d(SI, "n"), _nt("n")); // same digest
+        vm.expectRevert(NonceGiaUtilizzato.selector);
+        ref.commit(_d(SI, "n"), _nt("n"));
         vm.stopPrank();
     }
 
-    /// Re-voting is allowed only with a FRESH nonce (new nonce tag).
+    /// Re-voto ammesso solo con nonce nuovo.
     function test_freshNonceAllowsRevote() public {
         vm.startPrank(alice);
         ref.commit(_d(SI, "n"), _nt("n"));
-        ref.commit(_d(NO, "m"), _nt("m")); // fresh nonce
+        ref.commit(_d(NO, "m"), _nt("m"));
         vm.stopPrank();
         assertEq(ref.revisions(alice), 2);
     }
 
-    /// Uniqueness is on the NONCE, not on (vote,nonce): the same nonce reused with a
-    /// DIFFERENT vote must also be rejected (digest diverso ma stesso nonce).
+    /// L'unicità è sul NONCE, non su (voto,nonce): stesso nonce + voto diverso -> rifiutato.
     function test_sameNonceDifferentVoteRejected() public {
         vm.startPrank(alice);
         ref.commit(_d(SI, "shared"), _nt("shared"));
-        vm.expectRevert(Errors.NonceGiaUtilizzato.selector);
-        ref.commit(_d(NO, "shared"), _nt("shared")); // voto diverso, stesso nonce
+        vm.expectRevert(NonceGiaUtilizzato.selector);
+        ref.commit(_d(NO, "shared"), _nt("shared"));
         vm.stopPrank();
     }
 
-    /// Reveal takes ONLY the nonce: the contract tries each option with the committed
-    /// nonce and finds the one whose keccak256(option,nonce) matches the stored digest.
+    /// Reveal col solo nonce: il contratto deduce il voto.
     function test_revealWithOnlyNonceFindsVote() public {
         vm.prank(alice);
         ref.commit(_d(NO, "secret"), _nt("secret"));
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
-        ref.reveal("secret"); // niente voto: lo deduce il contratto
+        ref.reveal("secret");
         (, bool committed, bool confirmed, bytes32 vote,) = ref.ballots(alice);
         assertTrue(committed);
         assertTrue(confirmed);
         assertEq(vote, NO);
     }
 
-    /// A WRONG nonce confirms nothing and can be retried; then the correct one confirms.
+    /// Nonce errato non conferma nulla ed è ritentabile; poi quello giusto conferma.
     function test_canRetryAfterWrongReveal() public {
         vm.prank(alice);
         ref.commit(_d(NO, "secret"), _nt("secret"));
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
-        ref.reveal("x"); // nessuna opzione combacia -> non confermato, nessun revert
+        ref.reveal("x");
         (,, bool confirmedAfterWrong,,) = ref.ballots(alice);
         assertFalse(confirmedAfterWrong);
         vm.prank(alice);
-        ref.reveal("secret"); // ora combacia
-        vm.prank(govIT);
+        ref.reveal("secret");
+        vm.prank(gov);
         ref.close();
         assertEq(ref.result(NO), 1);
         assertEq(ref.result(SI), 0);
     }
 
-    /// After a CORRECT reveal the ballot is locked: re-revealing reverts.
+    /// Dopo un reveal corretto la scheda è bloccata.
     function test_cannotReRevealAfterCorrect() public {
         vm.prank(alice);
         ref.commit(_d(NO, "secret"), _nt("secret"));
-        vm.prank(govIT);
-        ref.setPhase(IReferendum.Phase.Tally);
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
         ref.reveal("secret");
         vm.prank(alice);
-        vm.expectRevert(Errors.AlreadyRevealed.selector);
+        vm.expectRevert(AlreadyRevealed.selector);
         ref.reveal("secret");
     }
 
-    function test_verifierMatchMath() public pure {
-        bytes32 v = bytes32("si");
-        bytes32 d = keccak256(abi.encodePacked(v, "abc"));
-        assertTrue(VoteVerifier.matches(v, "abc", d));
-        assertFalse(VoteVerifier.matches(v, "abd", d));
-        assertFalse(VoteVerifier.matches(bytes32("no"), "abc", d));
+    /// La matematica del digest: keccak256(voto, nonce) deduce l'opzione giusta.
+    function test_digestMathDeducesOption() public {
+        vm.prank(alice);
+        ref.commit(_d(SI, "abc"), _nt("abc"));
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
+        vm.prank(alice);
+        ref.reveal("abc");
+        (,,, bytes32 vote,) = ref.ballots(alice);
+        assertEq(vote, SI);
     }
 }
