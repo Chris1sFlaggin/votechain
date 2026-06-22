@@ -603,6 +603,8 @@ document.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = () => {
 }));
 
 $("createPoll").onclick = async () => {
+  const btn = $("createPoll");
+  if (btn.disabled) return; // anti doppio-click: una pubblicazione è già in corso
   if (!S.pollHub) return toast("Connetti il wallet su Sepolia.", "err");
   const title = $("petitionTitle").value.trim();
   const desc = $("petitionDesc").value.trim();
@@ -610,9 +612,15 @@ $("createPoll").onclick = async () => {
   let value;
   try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
-  
-  const ok = await tx(S.pollHub.createPetition(title, desc, { value }), "Raccolta firme pubblicata.");
-  if (ok) { $("petitionTitle").value = ""; $("petitionDesc").value = ""; closeSheet(); await renderPolls(); }
+
+  // blocca il bottone finché la tx non si risolve: evita due raccolte dallo stesso doppio click
+  btn.disabled = true;
+  try {
+    const ok = await tx(S.pollHub.createPetition(title, desc, { value }), "Raccolta firme pubblicata.");
+    if (ok) { $("petitionTitle").value = ""; $("petitionDesc").value = ""; closeSheet(); await renderPolls(); }
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 async function renderPolls() {
