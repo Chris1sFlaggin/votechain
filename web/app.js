@@ -4,24 +4,15 @@
 
 const PHASES = ["Configurazione", "Votazione aperta", "Spoglio in corso", "Referendum chiuso"];
 const LABELS = { si: "Sì", no: "No", bianca: "Scheda Bianca" };
-const seenJur = new Set(["Italia", "San Marino"]);
-const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { bootstrap: "", router: "", factory: "", chainId: 11155111 };
+const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { factory: "", pollHub: "", chainId: 11155111 };
 
-const ROUTER_ABI = [
-  "function simulatedSpidLogin(address referendum, string jurisdiction)",
-  "function isAuthorized(address, address) view returns (bool)",
-  "function jurisdictionOf(address, address) view returns (string)",
-  "function canVote(address, address, string) view returns (bool)",
-  "function isGovernment(address, string) view returns (bool)",
-  "function isAuthority(address) view returns (bool)",
-];
 const FACTORY_ABI = [
-  "function createReferendum(string, string, string[]) returns (address)",
+  "function government() view returns (address)",
+  "function createReferendum(string, string[]) returns (address)",
   "function getReferenda() view returns (address[])",
 ];
 const REF_ABI = [
   "function title() view returns (string)",
-  "function jurisdiction() view returns (string)",
   "function government() view returns (address)",
   "function phase() view returns (uint8)",
   "function finalized() view returns (bool)",
@@ -38,8 +29,8 @@ const REF_ABI = [
   "function setPhase(uint8)",
   "function close()",
 ];
-const BOOTSTRAP_ABI = ["function addresses() view returns (address, address, address)"];
 const POLLHUB_ABI = [
+  "function government() view returns (address)",
   "function createPetition(string, string) payable returns (uint256)",
   "function sign(uint256)",
   "function claim(uint256)",
@@ -50,10 +41,10 @@ const POLLHUB_ABI = [
   "function decision(uint256) view returns (bool decided, bool approved, address by)",
 ];
 
-const S = { provider: null, signer: null, account: null, router: null, factory: null, pollHub: null };
-const ADDR = { router: "", factory: "", pollHub: "" };
-let GOV_JURS = [];
+const S = { provider: null, signer: null, account: null, factory: null, pollHub: null };
+const ADDR = { factory: "", pollHub: "" };
 let IS_GOV = false;
+let GOV_ADDR = "";
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
@@ -65,10 +56,6 @@ const digestOf = (optionId, nonce) =>
 // impegno sul nonce, indipendente dal voto: l'unicità è su questo → nonce riusato = errore
 // qualunque sia il voto (mentre il digest tiene nascosto il voto fino al reveal).
 const nonceTagOf = (nonce) => ethers.solidityPackedKeccak256(["string"], [nonce]);
-// pseudonimo per-referendum: identità "finta" mostrata a video, derivata da (wallet, referendum).
-// Non è on-chain (on-chain c'è solo la giurisdizione); serve solo a far vedere all'utente la sua identità.
-const pseudoId = (wallet, ref) =>
-  "SPID-" + ethers.solidityPackedKeccak256(["address", "address"], [wallet, ref]).slice(2, 10).toUpperCase();
 
 function avatar(addr) {
   const h = addr.toLowerCase();
@@ -87,7 +74,7 @@ async function tx(promise, ok) {
 }
 function reason(e) {
   const s = e?.shortMessage || e?.reason || e?.message || String(e);
-  const m = s.match(/(NonceGiaUtilizzato|OutOfJurisdiction|WalletNotAuthorized|GovernmentCannotVote|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|EmptyOptions)/);
+  const m = s.match(/(NonceGiaUtilizzato|GovernmentCannotVote|NotGovernment|VotingNotOpen|RevealClosed|NoVote|CloseOnlyFromTally|AlreadyFinalized|EmptyOptions)/);
   return m ? `Errore contratto: ${m[1]}` : s;
 }
 
@@ -122,23 +109,15 @@ $("connectSocial").onclick = connect;
 $("connectChain").onclick = connect;
 
 async function resolveAddresses() {
-  // dal bootstrap (ritorna router, factory, pollHub)
-  if (ethers.isAddress(CFG.bootstrap) && S.signer) {
-    try {
-      const [r, f, ph] = await new ethers.Contract(CFG.bootstrap, BOOTSTRAP_ABI, S.signer).addresses();
-      ADDR.router = r; ADDR.factory = f; ADDR.pollHub = ph; return true;
-    } catch { /* bootstrap vecchio o non valido: provo gli indirizzi diretti */ }
-  }
-  if (ethers.isAddress(CFG.router) && ethers.isAddress(CFG.factory)) {
-    ADDR.router = CFG.router; ADDR.factory = CFG.factory;
+  if (ethers.isAddress(CFG.factory)) {
+    ADDR.factory = CFG.factory;
     ADDR.pollHub = ethers.isAddress(CFG.pollHub) ? CFG.pollHub : "";
     return true;
   }
   return false;
 }
 function initContracts() {
-  if (!ethers.isAddress(ADDR.router) || !ethers.isAddress(ADDR.factory)) return false;
-  S.router = new ethers.Contract(ADDR.router, ROUTER_ABI, S.signer || S.provider);
+  if (!ethers.isAddress(ADDR.factory)) return false;
   S.factory = new ethers.Contract(ADDR.factory, FACTORY_ABI, S.signer || S.provider);
   S.pollHub = ethers.isAddress(ADDR.pollHub) ? new ethers.Contract(ADDR.pollHub, POLLHUB_ABI, S.signer || S.provider) : null;
   return true;
@@ -146,12 +125,9 @@ function initContracts() {
 
 // --------------------------------------------------------------- ruoli + UI
 async function refresh() {
-  if (!S.account || !S.router) return;
-  GOV_JURS = [];
-  for (const j of ["Italia", "San Marino"]) {
-    try { if (await S.router.isGovernment(S.account, j)) GOV_JURS.push(j); } catch {}
-  }
-  IS_GOV = GOV_JURS.length > 0;
+  if (!S.account || !S.factory) return;
+  try { GOV_ADDR = await S.factory.government(); } catch { GOV_ADDR = ""; }
+  IS_GOV = !!GOV_ADDR && GOV_ADDR.toLowerCase() === S.account.toLowerCase();
   renderIdentity();
   gateAreas();
   await renderReferenda();
@@ -171,8 +147,6 @@ function gateAreas() {
   if (IS_GOV) {
     $("govArea").classList.remove("hidden");
     $("citizenArea").classList.add("hidden");
-    $("govJurs").textContent = GOV_JURS.join(", ");
-    $("newJur").innerHTML = GOV_JURS.map((j) => `<option>${j}</option>`).join("");
   } else {
     $("citizenArea").classList.remove("hidden");
     $("govArea").classList.add("hidden");
@@ -185,11 +159,10 @@ function gateAreas() {
 // ----------------------------------------------------------------- governo
 $("createRef").onclick = async () => {
   const title = $("newTitle").value.trim();
-  const jur = $("newJur").value;
   const opts = $("newOpts").value.split("\n").map((s) => s.trim()).filter(Boolean);
   if (!title || opts.length < 2) return toast("Titolo + almeno 2 opzioni.", "err");
   // le opzioni vanno come testo: il contratto assegna a ognuna un id UNICO (anche se il testo è uguale)
-  const ok = await tx(S.factory.createReferendum(title, jur, opts), `Referendum «${title}» emanato.`);
+  const ok = await tx(S.factory.createReferendum(title, opts), `Referendum «${title}» emanato.`);
   if (ok) { $("newTitle").value = ""; $("newOpts").value = ""; await refresh(); }
 };
 
@@ -206,7 +179,6 @@ async function renderReferenda() {
   const cards = await Promise.all(addrs.map((a) => card(a).catch((e) => cardError(a, e))));
   box.innerHTML = cards.join("");
   wireCards();
-  updateJurList();
 }
 
 function cardError(addr, e) {
@@ -219,31 +191,17 @@ function cardError(addr, e) {
 
 async function card(addr) {
   const c = new ethers.Contract(addr, REF_ABI, S.signer || S.provider);
-  const [title, jur, gov, phaseRaw, finalized, ids, labels, committed, revealed] = await Promise.all([
-    c.title(), c.jurisdiction(), c.government(), c.phase(), c.finalized(), c.getOptions(), c.getLabels(),
+  const [title, gov, phaseRaw, finalized, ids, labels, committed, revealed] = await Promise.all([
+    c.title(), c.government(), c.phase(), c.finalized(), c.getOptions(), c.getLabels(),
     c.committedCount(), c.revealedCount(),
   ]);
-  seenJur.add(jur);
   const phase = Number(phaseRaw);
   // opzione = { id univoco (per il voto), label (testo mostrato, può ripetersi) }
   const options = ids.map((id, i) => ({ id, label: labels[i] ?? decodeOpt(id) }));
   const isGovOfThis = S.account && gov.toLowerCase() === S.account.toLowerCase();
   const me = await c.ballots(S.account).catch(() => null);
 
-  // Identità SPID PER-REFERENDUM (finta): l'autorizzazione esiste solo per (referendum, wallet).
-  // Resta accessibile fino alla chiusura (phase 3 = Closed): dopo lo spoglio non si mostra più.
-  const authorized = (!IS_GOV && S.account)
-    ? await S.router.isAuthorized(addr, S.account).catch(() => false) : false;
-  const canVote = authorized
-    ? await S.router.canVote(addr, S.account, jur).catch(() => false) : false;
-  let identity = "";
-  if (authorized && phase !== 3) {
-    identity = `<div class="ident">Identità: <code>${pseudoId(S.account, addr)}</code> · ${jur}
-      <span class="ident__exp">valida fino alla chiusura</span></div>`;
-  }
-
   // SEGRETEZZA: gli esiti sono sigillati finché il referendum non è chiuso (close()).
-  // Prima della chiusura non si mostra nessun conteggio (niente exit-poll on-chain in UI).
   let results;
   if (finalized) {
     const counts = await Promise.all(ids.map((id) => c.result(id).then(Number).catch(() => 0)));
@@ -264,12 +222,9 @@ async function card(addr) {
       <button class="btn btn--sm btn--gov" data-act="close" data-ref="${addr}" ${phase !== 2 ? "disabled" : ""}>Chiudi e conta</button>
     </div>`;
   } else if (!IS_GOV) {
-    if (phase === 1) {
-      if (canVote) actions += voteForm(addr, options);
-      else if (authorized) actions += `<p class="muted">La tua identità è per un'altra giurisdizione. Creane una per «${jur}».</p>${enrollForm(addr, jur)}`;
-      else actions += enrollForm(addr, jur); // niente identità = niente voto
-    }
-    // reveal solo in spoglio e finché NON confermato (un reveal corretto blocca; uno sbagliato no)
+    // voto aperto: qualsiasi wallet vota in fase di Votazione
+    if (phase === 1) actions += voteForm(addr, options);
+    // reveal solo in spoglio e finché NON confermato
     if (phase === 2 && me && me.committed && !me.confirmed) actions += revealForm(addr);
   }
 
@@ -279,20 +234,12 @@ async function card(addr) {
   return `<article class="ref-card">
     <div class="ref-card__top"><span class="phase phase--${phase}">${PHASES[phase]}</span>${status}</div>
     <h3>${title}</h3>
-    <p class="ref-card__meta">${jur} · commit ${committed} · reveal ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
+    <p class="ref-card__meta">commit ${committed} · reveal ${revealed} · ${finalized ? "esito ufficiale" : "spoglio non concluso"}</p>
     ${results}
-    ${identity}
     ${actions}
   </article>`;
 }
 
-function enrollForm(addr, jur) {
-  return `<div class="act act--enroll">
-    <span class="act__lbl">Per votare crea la tua identità SPID per questo referendum</span>
-    <p class="muted">Firmi con SPID (simulato) l'autorizzazione a votare «${jur}». On-chain finisce solo la giurisdizione, nessun dato personale. Vale solo per questo referendum.</p>
-    <button class="btn btn--spid btn--sm" data-enroll="${addr}" data-jur="${jur}">Crea identità SPID</button>
-  </div>`;
-}
 
 function voteForm(addr, options) {
   const radios = options.map((o, i) =>
@@ -317,14 +264,6 @@ function revealForm(addr) {
 }
 
 function wireCards() {
-  document.querySelectorAll("[data-enroll]").forEach((b) => b.onclick = async () => {
-    if (!S.router) return toast("Connetti il wallet (Sepolia) prima.", "err");
-    const ok = await tx(
-      S.router.simulatedSpidLogin(b.dataset.enroll, b.dataset.jur),
-      "Identità SPID creata per questo referendum — on-chain solo la giurisdizione.",
-    );
-    if (ok) await refresh();
-  });
   document.querySelectorAll("[data-vote]").forEach((f) => f.onsubmit = async (e) => {
     e.preventDefault();
     const addr = f.dataset.vote;
@@ -358,10 +297,6 @@ function wireCards() {
   });
 }
 
-function updateJurList() {
-  const dl = $("jurList");
-  if (dl) dl.innerHTML = [...seenJur].map((j) => `<option>${j}</option>`).join("");
-}
 
 // ============================================================ ESPLORA CHAIN (live)
 // Ascolta gli eventi dei NOSTRI contratti su Sepolia e li traduce in linguaggio umano:
@@ -369,9 +304,7 @@ function updateJurList() {
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const EXPLORER_IFACE = new ethers.Interface([
-  "event GovernmentRegistered(address indexed government, string jurisdiction)",
-  "event WalletAuthorized(address indexed referendum, address indexed wallet, string jurisdiction)",
-  "event ReferendumCreated(address indexed referendum, address indexed government, string jurisdiction, string title)",
+  "event ReferendumCreated(address indexed referendum, address indexed government, string title)",
   "event Committed(address indexed voter, bytes32 digest, uint32 revision)",
   "event Revealed(address indexed voter, string vote, string nonce, bool matches)",
   "event PhaseChanged(uint8 phase)",
@@ -389,21 +322,9 @@ const shortH = (h) => (h ? `${h.slice(0, 10)}…` : "—");
 const EVT_META = {
   ReferendumCreated: {
     ico: "", kind: "create", title: "Referendum emanato",
-    sum: (a) => `«${a.title}» · ${a.jurisdiction}`,
+    sum: (a) => `«${a.title}»`,
     why: "Il governo ha pubblicato un nuovo contratto-referendum: da ora esiste in modo permanente e chiunque può verificarne regole ed esiti. Nessuno può cancellarlo.",
-    data: (a) => [["Contratto", shortA(a.referendum)], ["Governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction], ["Titolo", a.title]],
-  },
-  WalletAuthorized: {
-    ico: "", kind: "id", title: "Identità SPID creata",
-    sum: (a) => `un cittadino si è autorizzato a votare (${a.jurisdiction})`,
-    why: "Un cittadino ha firmato la sua identità SPID (simulata) per UN referendum. On-chain finisce solo la giurisdizione: niente nome, niente codice fiscale, nemmeno uno pseudonimo.",
-    data: (a) => [["Per il referendum", shortA(a.referendum)], ["Wallet cittadino", shortA(a.wallet)], ["Giurisdizione", a.jurisdiction]],
-  },
-  GovernmentRegistered: {
-    ico: "", kind: "gov", title: "Governo registrato",
-    sum: (a) => `autorità abilitata per ${a.jurisdiction}`,
-    why: "Un indirizzo diventa autorità elettorale per una giurisdizione: solo lui potrà emanare referendum lì. È il controllo degli accessi scritto in chiaro nella catena.",
-    data: (a) => [["Wallet governo", shortA(a.government)], ["Giurisdizione", a.jurisdiction]],
+    data: (a) => [["Contratto", shortA(a.referendum)], ["Governo", shortA(a.government)], ["Titolo", a.title]],
   },
   Committed: {
     ico: "", kind: "commit", title: "Voto segreto (commit)",
@@ -462,7 +383,7 @@ let chainItems = []; // eventi decodificati recenti (cap)
 
 async function startExplorer() {
   if (!S.provider) return;
-  chainWatch = [ADDR.router, ADDR.factory, ADDR.pollHub].filter((a) => ethers.isAddress(a));
+  chainWatch = [ADDR.factory, ADDR.pollHub].filter((a) => ethers.isAddress(a));
   try { chainWatch.push(...(await S.factory.getReferenda())); } catch {}
   const head = await S.provider.getBlockNumber();
   // backfill resiliente: alcuni RPC limitano il range, riprovo via via più corto
