@@ -613,13 +613,17 @@ $("createPoll").onclick = async () => {
   try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
 
-  // blocca il bottone finché la tx non si risolve: evita due raccolte dallo stesso doppio click
+  // disattiva il bottone all'istante (con feedback visivo) finché la tx non è confermata
+  // o fallisce: così un secondo click non può pubblicare una seconda raccolta.
+  const label = btn.textContent;
   btn.disabled = true;
+  btn.textContent = "Pubblicazione…";
   try {
     const ok = await tx(S.pollHub.createPetition(title, desc, { value }), "Raccolta firme pubblicata.");
     if (ok) { $("petitionTitle").value = ""; $("petitionDesc").value = ""; closeSheet(); await renderPolls(); }
   } finally {
     btn.disabled = false;
+    btn.textContent = label;
   }
 };
 
