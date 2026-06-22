@@ -6,7 +6,7 @@
   <title>VoteChain · referendum & sondaggi su blockchain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=22" />
+  <link rel="stylesheet" href="style.css?v=23" />
   <script src="vendor/ethers.umd.min.js"></script>
 </head>
 <body data-screen="access">
@@ -49,12 +49,12 @@
         <div class="hero__glow" aria-hidden="true"></div>
         <p class="hero__eyebrow">Referendum digitali · testnet Sepolia</p>
         <h1 class="hero__title">Vota sulla blockchain,<br>il tuo voto resta segreto</h1>
-        <p class="hero__sub">Identità SPID simulata, commit–reveal con nonce, conteggio verificabile on-chain. Nessun dato personale sulla catena.</p>
+        <p class="hero__sub">Voto col tuo wallet, commit–reveal con nonce, conteggio verificabile on-chain.</p>
         <button id="connectHero" class="btn btn--primary btn--xl">Connetti wallet per iniziare</button>
         <div class="chips">
           <div class="chip"><span>1</span> Connetti MetaMask (Sepolia)</div>
-          <div class="chip"><span>2</span> Crea identità SPID</div>
-          <div class="chip"><span>3</span> Vota e rivela</div>
+          <div class="chip"><span>2</span> Vota (commit)</div>
+          <div class="chip"><span>3</span> Rivela il nonce</div>
         </div>
       </section>
 
@@ -64,10 +64,7 @@
         </div>
         <section class="card">
           <h2>Emana un referendum</h2>
-          <div class="grid2">
-            <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Es. Referendum Costituzionale 2026"></label>
-            <label class="field"><span>Giurisdizione</span><select id="newJur"></select></label>
-          </div>
+          <label class="field"><span>Titolo</span><input id="newTitle" placeholder="Es. Referendum Costituzionale 2026"></label>
           <label class="field"><span>Opzioni (una per riga, max 31 caratteri)</span><textarea id="newOpts" rows="3" placeholder="si&#10;no&#10;bianca"></textarea></label>
           <button id="createRef" class="btn btn--gov btn--xl">Emana referendum</button>
         </section>
@@ -75,12 +72,8 @@
 
       <section id="citizenArea" class="hidden">
         <div class="role-banner role-banner--cit">
-          <div><b>Cittadino</b><span id="spidStatus">Per votare crea un'identità SPID dedicata dal riquadro di ciascun referendum qui sotto.</span></div>
+          <div><b>Cittadino</b><span>Vota i referendum aperti qui sotto direttamente col tuo wallet: deposita il voto (commit) e poi rivela il nonce durante lo spoglio.</span></div>
         </div>
-        <section class="card" id="spidCard">
-          <h2>Identità SPID <small>(simulata)</small></h2>
-          <p class="muted">Per <b>ogni</b> referendum firmi con SPID (simulato) una <b>identità dedicata</b>: vale solo per quel referendum e resta accessibile <b>fino alla chiusura</b>. La stessa identità <b>non</b> permette di votare altri referendum, e <b>senza identità non si può votare</b>. On-chain finisce <b>solo la giurisdizione</b> — nessun dato personale, nemmeno uno pseudonimo. Crea l'identità dal riquadro del referendum che vuoi votare </p>
-        </section>
       </section>
 
       <section id="voteSection" class="hidden">
@@ -129,7 +122,7 @@
   </main>
 
   <footer class="foot">
-    <span>Prototipo accademico INF0422 · referendum istituzionali (SPID simulato) + sondaggi social · Solidity su <b>Sepolia</b></span>
+    <span>Prototipo accademico INF0422 · referendum istituzionali + sondaggi social · Solidity su <b>Sepolia</b></span>
   </footer>
 
   <!-- bottom nav social (stile app) -->
@@ -152,7 +145,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="config.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>
