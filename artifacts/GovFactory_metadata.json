@@ -6,13 +6,7 @@
 	"output": {
 		"abi": [
 			{
-				"inputs": [
-					{
-						"internalType": "contract SPIDWalletRouter",
-						"name": "_router",
-						"type": "address"
-					}
-				],
+				"inputs": [],
 				"stateMutability": "nonpayable",
 				"type": "constructor"
 			},
@@ -44,12 +38,6 @@
 					{
 						"indexed": false,
 						"internalType": "string",
-						"name": "jurisdiction",
-						"type": "string"
-					},
-					{
-						"indexed": false,
-						"internalType": "string",
 						"name": "title",
 						"type": "string"
 					}
@@ -75,11 +63,6 @@
 					{
 						"internalType": "string",
 						"name": "title",
-						"type": "string"
-					},
-					{
-						"internalType": "string",
-						"name": "jurisdiction",
 						"type": "string"
 					},
 					{
@@ -114,10 +97,10 @@
 			},
 			{
 				"inputs": [],
-				"name": "router",
+				"name": "government",
 				"outputs": [
 					{
-						"internalType": "contract SPIDWalletRouter",
+						"internalType": "address",
 						"name": "",
 						"type": "address"
 					}
@@ -129,19 +112,19 @@
 		"devdoc": {
 			"kind": "dev",
 			"methods": {},
-			"title": "GovFactory — lets a registered government deploy new Referendum contracts.",
+			"title": "GovFactory — il governo (chi fa il deploy) emette i referendum.",
 			"version": 1
 		},
 		"userdoc": {
 			"kind": "user",
 			"methods": {},
-			"notice": "The government calls createReferendum() and a dedicated Referendum `i`         contract is deployed via `new` (on-chain factory). A government may only         create referenda in its OWN jurisdiction (creation-side geofencing,         enforced through the SPIDWalletRouter).",
+			"notice": "Niente router/giurisdizioni: l'unico governo è il deployer di questa factory.         Ogni referendum creato eredita lo stesso governo.",
 			"version": 1
 		}
 	},
 	"settings": {
 		"compilationTarget": {
-			"remix/VotingSystem.flat.sol": "GovFactory"
+			"remix/referendum.sol": "GovFactory"
 		},
 		"evmVersion": "prague",
 		"libraries": {},
@@ -155,12 +138,12 @@
 		"remappings": []
 	},
 	"sources": {
-		"remix/VotingSystem.flat.sol": {
-			"keccak256": "0xc5ad21c9267e17edceb2022b94344af4e9f7c27e378a0a4a92c7136b979f399e",
+		"remix/referendum.sol": {
+			"keccak256": "0x9f1470bf8866e06e72d6d65f79e062356e31cb590a4373ecf5edb4f7d1523c5a",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://137f60c0814082b41859a4f2c3a951f2598ce9e7a6da28f38b9511b8a1373a51",
-				"dweb:/ipfs/QmezCvaD8J3nMLTaufrMpCBKyLxatzktBjwWGAJz8GWaG2"
+				"bzz-raw://3fcedb91137e96e5bf6d564fda98eb634f6e1b0e71c3ae5062d9d282815a9f6a",
+				"dweb:/ipfs/QmakeGsH9TVey3DKWwVaDsZzT1FFra2dCzzTUvU1taUEpx"
 			]
 		}
 	},

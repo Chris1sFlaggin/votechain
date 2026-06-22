@@ -6,13 +6,7 @@
 	"output": {
 		"abi": [
 			{
-				"inputs": [
-					{
-						"internalType": "contract SPIDWalletRouter",
-						"name": "_router",
-						"type": "address"
-					}
-				],
+				"inputs": [],
 				"stateMutability": "nonpayable",
 				"type": "constructor"
 			},
@@ -309,22 +303,16 @@
 				"type": "function"
 			},
 			{
-				"inputs": [
-					{
-						"internalType": "uint256",
-						"name": "",
-						"type": "uint256"
-					}
-				],
-				"name": "getSigners",
+				"inputs": [],
+				"name": "government",
 				"outputs": [
 					{
-						"internalType": "address[]",
+						"internalType": "address",
 						"name": "",
-						"type": "address[]"
+						"type": "address"
 					}
 				],
-				"stateMutability": "pure",
+				"stateMutability": "view",
 				"type": "function"
 			},
 			{
@@ -389,19 +377,6 @@
 				"type": "function"
 			},
 			{
-				"inputs": [],
-				"name": "router",
-				"outputs": [
-					{
-						"internalType": "contract SPIDWalletRouter",
-						"name": "",
-						"type": "address"
-					}
-				],
-				"stateMutability": "view",
-				"type": "function"
-			},
-			{
 				"inputs": [
 					{
 						"internalType": "uint256",
@@ -418,41 +393,30 @@
 		"devdoc": {
 			"kind": "dev",
 			"methods": {},
-			"title": "PollHub — raccolta firme social (petizioni).",
 			"version": 1
 		},
 		"userdoc": {
 			"kind": "user",
 			"methods": {
 				"claim(uint256)": {
-					"notice": "Il creatore riprende la cauzione SE la raccolta è stata APPROVATA dal governo."
+					"notice": "Il creatore riprende la cauzione SE approvata dal governo."
 				},
 				"createPetition(string,string)": {
-					"notice": "Crea una raccolta firme depositando la cauzione (msg.value).         Non servono opzioni: è una petizione unica (si firma o no)."
+					"notice": "Crea una raccolta firme depositando la cauzione (msg.value)."
 				},
 				"decide(uint256,bool)": {
-					"notice": "Il GOVERNO (qualsiasi giurisdizione) approva o respinge una raccolta firme         che ha raggiunto MIN_SIGNATURES. È una transazione on-chain; può cambiare idea         (l'ultima decide) finché non viene reclamata la cauzione.         Gli utenti normali NON possono (lo impedisce la UI, ma qui è on-chain)."
-				},
-				"decision(uint256)": {
-					"notice": "Decisione del governo su una raccolta firme (se presente)."
-				},
-				"getSigners(uint256)": {
-					"notice": "Restituisce l'elenco dei firmatari (per trasparenza, gas permitting).         Nota: per petizioni con molti firmatari può costare gas."
-				},
-				"hasSignedPetition(uint256,address)": {
-					"notice": "Verifica se un indirizzo ha firmato una petizione."
+					"notice": "Il GOVERNO (deployer) approva o respinge una raccolta che ha raggiunto         MIN_SIGNATURES. Può cambiare idea (l'ultima decide) finché non è reclamata."
 				},
 				"sign(uint256)": {
-					"notice": "Firma una raccolta firme (una sola volta per indirizzo).         Non ci sono opzioni: la firma è unica per petizione."
+					"notice": "Firma una raccolta (una sola volta per indirizzo)."
 				}
 			},
-			"notice": "Chiunque crea una raccolta firme depositando una **cauzione** (stake anti-spam).         I cittadini firmano una sola volta (autenticazione via wallet).         Nessun voto su opzioni: è una petizione unica (sì/firma).         Se si superano **MIN_SIGNATURES** (5 per PoC), la raccolta diventa \"approvabile\"         dal governo. Il governo vede DUE liste:           1. Tutte le raccolte firme (anche sotto soglia)           2. Raccolte firme con ≥ MIN_SIGNATURES → può approvare o respingere.         Se approvata, il creatore riprende la cauzione; se respinta, la cauzione resta bloccata.         Nessuna identità/SPID/giurisdizione: parte aperta e social.",
 			"version": 1
 		}
 	},
 	"settings": {
 		"compilationTarget": {
-			"remix/VotingSystem.flat.sol": "PollHub"
+			"remix/social.sol": "PollHub"
 		},
 		"evmVersion": "prague",
 		"libraries": {},
@@ -466,12 +430,12 @@
 		"remappings": []
 	},
 	"sources": {
-		"remix/VotingSystem.flat.sol": {
-			"keccak256": "0xc5ad21c9267e17edceb2022b94344af4e9f7c27e378a0a4a92c7136b979f399e",
+		"remix/social.sol": {
+			"keccak256": "0x0a01a47fafcd065ef8e7cbe081fe079d272682c57368f5131f830933f9196030",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://137f60c0814082b41859a4f2c3a951f2598ce9e7a6da28f38b9511b8a1373a51",
-				"dweb:/ipfs/QmezCvaD8J3nMLTaufrMpCBKyLxatzktBjwWGAJz8GWaG2"
+				"bzz-raw://e6acaca89fa5496c329a242cd9bd170bfa733d0ea01e518a6c8e0938fc04b9b1",
+				"dweb:/ipfs/QmbheFkSjY1evSU8KnPtUSP1GFnfwjWneCdVYRbZNYuuk9"
 			]
 		}
 	},
