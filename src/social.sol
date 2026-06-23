@@ -22,6 +22,10 @@ contract PollHub {
 
     address public immutable government; // chi ha fatto il deploy
 
+    uint256 public round; // round APERTO corrente (parte da 0)
+    mapping(uint256 => uint256) public forfeitedOf; // round => somma stake delle respinte
+    mapping(uint256 => uint256) public approvedStakeOf; // round => somma stake delle approvate
+
     struct Petition {
         address creator;
         string title;
@@ -31,6 +35,7 @@ contract PollHub {
         bool approved; // true = approvata, false = respinta
         bool decided; // true se il governo ha deciso
         bool claimed; // true se la cauzione è stata reclamata
+        uint256 decidedRound; // round in cui il governo ha deciso la petizione
     }
 
     struct GovDecision {
@@ -47,6 +52,7 @@ contract PollHub {
     event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures);
     event PetitionDecided(uint256 indexed id, address indexed government, bool approved);
     event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount);
+    event PeriodClosed(uint256 indexed round, uint256 forfeited, uint256 approvedStake);
 
     modifier onlyGov() {
         if (msg.sender != government) revert NotGovernment();
@@ -68,7 +74,17 @@ contract PollHub {
         _govDecisions[id] = GovDecision(true, approve, msg.sender);
         p.approved = approve;
         p.decided = true;
+        p.decidedRound = round; // si settla nel round corrente
+        if (approve) approvedStakeOf[round] += p.stake;
+        else forfeitedOf[round] += p.stake; // respinta: lo stake alimenta il montepremi del round
         emit PetitionDecided(id, msg.sender, approve);
+    }
+
+    /// @notice Il GOVERNO chiude il round corrente: forfeitedOf/approvedStakeOf diventano
+    ///         definitivi e gli approvati di quel round possono reclamare. Ne apre subito uno nuovo.
+    function closePeriod() external onlyGov {
+        emit PeriodClosed(round, forfeitedOf[round], approvedStakeOf[round]);
+        round += 1; // il round appena chiuso e' ora immutabile e reclamabile
     }
 
     function decision(uint256 id) external view returns (bool decided, bool approved, address by) {
@@ -117,6 +133,10 @@ contract PollHub {
     // -------------------------------------------------------------------------------- VIEWS
     function petitionsCount() external view returns (uint256) {
         return _petitions.length;
+    }
+
+    function petitionRound(uint256 id) external view returns (uint256) {
+        return _petitions[id].decidedRound;
     }
 
     function getPetition(uint256 id)

@@ -20,6 +20,8 @@ contract PollHubTest is Test {
     address gov = makeAddr("gov"); // deployer = governo
     address creator = makeAddr("creator");
 
+    event PeriodClosed(uint256 indexed round, uint256 forfeited, uint256 approvedStake);
+
     function setUp() public {
         vm.prank(gov);
         hub = new PollHub(); // gov = government
@@ -146,5 +148,43 @@ contract PollHubTest is Test {
         vm.prank(creator);
         vm.expectRevert(AlreadyClaimed.selector);
         hub.claim(id);
+    }
+
+    function test_decideAccumulatesPerRound() public {
+        vm.prank(creator);
+        uint256 a = hub.createPetition{value: 0.02 ether}("A", "desc");
+        _signN(a, 5, 100);
+        vm.prank(gov);
+        hub.decide(a, true);
+
+        address creator2 = makeAddr("creator2");
+        vm.deal(creator2, 1 ether);
+        vm.prank(creator2);
+        uint256 b = hub.createPetition{value: 0.01 ether}("B", "desc");
+        _signN(b, 5, 200);
+        vm.prank(gov);
+        hub.decide(b, false);
+
+        assertEq(hub.approvedStakeOf(0), 0.02 ether);
+        assertEq(hub.forfeitedOf(0), 0.01 ether);
+        assertEq(hub.petitionRound(a), 0);
+        assertEq(hub.petitionRound(b), 0);
+    }
+
+    function test_closePeriodIncrementsRoundOnlyGov() public {
+        assertEq(hub.round(), 0);
+        vm.prank(makeAddr("rando"));
+        vm.expectRevert(NotGovernment.selector);
+        hub.closePeriod();
+        vm.prank(gov);
+        hub.closePeriod();
+        assertEq(hub.round(), 1);
+    }
+
+    function test_closePeriodEmits() public {
+        vm.expectEmit(true, false, false, true, address(hub));
+        emit PeriodClosed(0, 0, 0);
+        vm.prank(gov);
+        hub.closePeriod();
     }
 }
