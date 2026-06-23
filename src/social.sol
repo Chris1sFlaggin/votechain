@@ -17,6 +17,7 @@ error BelowMinVotes(); // sotto la soglia minima di firme
 error NotGovernment();
 error AlreadyDecided(); // decide chiamata due volte sulla stessa petizione
 error NotClosed(); // claim su un round non ancora chiuso
+error RoundHasNoBeneficiaries(); // chiusura con montepremi (respinte) ma nessun approvato
 
 contract PollHub {
     uint64 public constant MIN_SIGNATURES = 5; // soglia minima firme per essere approvabile (PoC)
@@ -84,6 +85,9 @@ contract PollHub {
     /// @notice Il GOVERNO chiude il round corrente: forfeitedOf/approvedStakeOf diventano
     ///         definitivi e gli approvati di quel round possono reclamare. Ne apre subito uno nuovo.
     function closePeriod() external onlyGov {
+        // guardia: non chiudere un round con montepremi (respinte) ma senza approvati,
+        // altrimenti quei fondi resterebbero bloccati senza beneficiari.
+        if (forfeitedOf[round] > 0 && approvedStakeOf[round] == 0) revert RoundHasNoBeneficiaries();
         emit PeriodClosed(round, forfeitedOf[round], approvedStakeOf[round]);
         round += 1; // il round appena chiuso e' ora immutabile e reclamabile
     }

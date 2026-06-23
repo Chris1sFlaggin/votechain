@@ -12,7 +12,8 @@ import {
     AlreadyClaimed,
     BelowMinVotes,
     AlreadyDecided,
-    NotClosed
+    NotClosed,
+    RoundHasNoBeneficiaries
 } from "../src/social.sol";
 
 /// Petizioni: cauzione + raccolta firme + rimborso se approvato dal governo (deployer).
@@ -320,23 +321,37 @@ contract PollHubTest is Test {
         assertEq(bo.balance - bb, 100); // 100 stake + 0 roi (round 1, isolato)
     }
 
-    function test_rejectionsNoApprovalsLockFunds() public {
+    function test_cannotCloseRoundWithoutBeneficiaries() public {
         address ca = makeAddr("ca3");
         vm.deal(ca, 1 ether);
         vm.prank(ca);
         uint256 ic = hub.createPetition{value: 0.05 ether}("C", "d");
         _signN(ic, 5, 10);
-        vm.startPrank(gov);
-        hub.decide(ic, false);
-        hub.closePeriod(); // non reverta anche con approvedStakeOf[0] == 0
-        vm.stopPrank();
+        vm.prank(gov);
+        hub.decide(ic, false); // respinta, nessuna approvata nel round
+        vm.prank(gov);
+        vm.expectRevert(RoundHasNoBeneficiaries.selector);
+        hub.closePeriod(); // guardia A: montepremi senza beneficiari -> revert
+    }
 
-        assertEq(hub.forfeitedOf(0), 0.05 ether);
-        assertEq(hub.approvedStakeOf(0), 0);
-        assertEq(address(hub).balance, 0.05 ether); // ETH bloccato nel contratto
+    function test_closeAllowedWithBeneficiaries() public {
+        // un approvato c'e' -> la chiusura passa anche con respinte presenti
+        address al = makeAddr("alB");
+        vm.deal(al, 1 ether);
+        address ca = makeAddr("caB");
+        vm.deal(ca, 1 ether);
+        vm.prank(al);
+        uint256 ia = hub.createPetition{value: 10}("A", "d");
         vm.prank(ca);
-        vm.expectRevert(PollNotWon.selector);
-        hub.claim(ic);
+        uint256 ic = hub.createPetition{value: 10}("C", "d");
+        _signN(ia, 5, 10);
+        _signN(ic, 5, 20);
+        vm.startPrank(gov);
+        hub.decide(ia, true);
+        hub.decide(ic, false);
+        hub.closePeriod(); // ok: c'e' almeno un beneficiario
+        vm.stopPrank();
+        assertEq(hub.round(), 1);
     }
 
     function test_reentrancyNoDoublePayout() public {
