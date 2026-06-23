@@ -240,4 +240,144 @@ contract PollHubTest is Test {
         assertEq(alice.balance - ba, 20); // 10 stake + 10 roi
         assertEq(bob.balance - bb, 60); // 30 stake + 30 roi
     }
+
+    function test_solvencyRoiSumsToForfeited() public {
+        address al = makeAddr("al");
+        vm.deal(al, 1 ether);
+        address bo = makeAddr("bo");
+        vm.deal(bo, 1 ether);
+        address c1 = makeAddr("c1");
+        vm.deal(c1, 1 ether);
+        address c2 = makeAddr("c2");
+        vm.deal(c2, 1 ether);
+
+        vm.prank(al);
+        uint256 ia = hub.createPetition{value: 10}("A", "d");
+        vm.prank(bo);
+        uint256 ib = hub.createPetition{value: 30}("B", "d");
+        vm.prank(c1);
+        uint256 i1 = hub.createPetition{value: 15}("C1", "d");
+        vm.prank(c2);
+        uint256 i2 = hub.createPetition{value: 25}("C2", "d");
+        _signN(ia, 5, 10);
+        _signN(ib, 5, 20);
+        _signN(i1, 5, 30);
+        _signN(i2, 5, 40);
+
+        vm.startPrank(gov);
+        hub.decide(ia, true);
+        hub.decide(ib, true);
+        hub.decide(i1, false);
+        hub.decide(i2, false);
+        hub.closePeriod();
+        vm.stopPrank();
+
+        uint256 ba = al.balance;
+        uint256 bb = bo.balance;
+        vm.prank(al);
+        hub.claim(ia);
+        vm.prank(bo);
+        hub.claim(ib);
+        uint256 roiA = al.balance - ba - 10;
+        uint256 roiB = bo.balance - bb - 30;
+        assertEq(roiA + roiB, hub.forfeitedOf(0)); // i ROI sommano al montepremi (40 divisibile: no polvere)
+    }
+
+    function test_multiRoundIsolation() public {
+        address al = makeAddr("al2");
+        vm.deal(al, 1 ether);
+        address ca = makeAddr("ca2");
+        vm.deal(ca, 1 ether);
+        vm.prank(al);
+        uint256 ia = hub.createPetition{value: 100}("A", "d");
+        vm.prank(ca);
+        uint256 ic = hub.createPetition{value: 100}("C", "d");
+        _signN(ia, 5, 10);
+        _signN(ic, 5, 20);
+        vm.startPrank(gov);
+        hub.decide(ia, true);
+        hub.decide(ic, false);
+        hub.closePeriod(); // chiude round 0
+        vm.stopPrank();
+
+        address bo = makeAddr("bo2");
+        vm.deal(bo, 1 ether);
+        vm.prank(bo);
+        uint256 ib = hub.createPetition{value: 100}("B", "d");
+        _signN(ib, 5, 30);
+        vm.startPrank(gov);
+        hub.decide(ib, true);
+        hub.closePeriod(); // chiude round 1
+        vm.stopPrank();
+
+        uint256 ba = al.balance;
+        uint256 bb = bo.balance;
+        vm.prank(al);
+        hub.claim(ia);
+        vm.prank(bo);
+        hub.claim(ib);
+        assertEq(al.balance - ba, 200); // 100 stake + 100 roi (round 0)
+        assertEq(bo.balance - bb, 100); // 100 stake + 0 roi (round 1, isolato)
+    }
+
+    function test_rejectionsNoApprovalsLockFunds() public {
+        address ca = makeAddr("ca3");
+        vm.deal(ca, 1 ether);
+        vm.prank(ca);
+        uint256 ic = hub.createPetition{value: 0.05 ether}("C", "d");
+        _signN(ic, 5, 10);
+        vm.startPrank(gov);
+        hub.decide(ic, false);
+        hub.closePeriod(); // non reverta anche con approvedStakeOf[0] == 0
+        vm.stopPrank();
+
+        assertEq(hub.forfeitedOf(0), 0.05 ether);
+        assertEq(hub.approvedStakeOf(0), 0);
+        assertEq(address(hub).balance, 0.05 ether); // ETH bloccato nel contratto
+        vm.prank(ca);
+        vm.expectRevert(PollNotWon.selector);
+        hub.claim(ic);
+    }
+
+    function test_reentrancyNoDoublePayout() public {
+        ReentrantCreator atk = new ReentrantCreator(hub);
+        vm.deal(address(atk), 1 ether);
+        uint256 id = atk.createAndGet{value: 0.01 ether}("P", "d");
+        _signN(id, 5, 1);
+        vm.startPrank(gov);
+        hub.decide(id, true);
+        hub.closePeriod();
+        vm.stopPrank();
+
+        uint256 beforeBal = address(atk).balance;
+        atk.doClaim(); // il rientro in receive() trova AlreadyClaimed (CEI) e viene ignorato
+        assertEq(address(atk).balance - beforeBal, 0.01 ether); // pagato UNA sola volta (roi 0)
+    }
+}
+
+/// Creator malevolo: prova a rientrare in claim() durante il pagamento.
+contract ReentrantCreator {
+    PollHub hub;
+    uint256 public id;
+    bool reentered;
+
+    constructor(PollHub _hub) {
+        hub = _hub;
+    }
+
+    function createAndGet(string calldata t, string calldata d) external payable returns (uint256) {
+        id = hub.createPetition{value: msg.value}(t, d);
+        return id;
+    }
+
+    function doClaim() external {
+        hub.claim(id);
+    }
+
+    receive() external payable {
+        if (!reentered) {
+            reentered = true;
+            try hub.claim(id) {} catch {} // CEI: il rientro deve fallire (AlreadyClaimed)
+        }
+    }
 }
