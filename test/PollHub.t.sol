@@ -62,10 +62,9 @@ contract PollHubTest is Test {
         _signN(id, 5, 1);
         vm.prank(gov);
         hub.decide(id, true);
-        (bool decided, bool approved, address by) = hub.decision(id);
+        (,,,,, bool approved, bool decided,) = hub.getPetition(id);
         assertTrue(decided);
         assertTrue(approved);
-        assertEq(by, gov);
     }
 
     function test_decideIsFinal() public {

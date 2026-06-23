@@ -43,7 +43,6 @@ const POLLHUB_ABI = [
   "function getPetition(uint256) view returns (address creator, string title, string description, uint128 stake, uint64 signatureCount, bool approved, bool decided, bool claimed)",
   "function hasSignedPetition(uint256, address) view returns (bool)",
   "function decide(uint256, bool)",
-  "function decision(uint256) view returns (bool decided, bool approved, address by)",
 ];
 
 const S = { provider: null, signer: null, account: null, factory: null, pollHub: null };

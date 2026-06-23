@@ -40,15 +40,8 @@ contract PollHub {
         uint256 decidedRound; // round in cui il governo ha deciso la petizione
     }
 
-    struct GovDecision {
-        bool decided;
-        bool approved;
-        address by;
-    }
-
     Petition[] private _petitions; // petitionId = indice
     mapping(uint256 => mapping(address => bool)) public hasSigned; // id => firmatario => bool
-    mapping(uint256 => GovDecision) private _govDecisions; // id => decisione governo
 
     event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake);
     event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures);
@@ -73,7 +66,6 @@ contract PollHub {
         if (p.creator == address(0)) revert BadPoll();
         if (p.signatureCount < MIN_SIGNATURES) revert BelowMinVotes();
         if (p.decided) revert AlreadyDecided(); // finalita': niente piu' cambio di idea
-        _govDecisions[id] = GovDecision(true, approve, msg.sender);
         p.approved = approve;
         p.decided = true;
         p.decidedRound = round; // si settla nel round corrente
@@ -90,11 +82,6 @@ contract PollHub {
         if (forfeitedOf[round] > 0 && approvedStakeOf[round] == 0) revert RoundHasNoBeneficiaries();
         emit PeriodClosed(round, forfeitedOf[round], approvedStakeOf[round]);
         round += 1; // il round appena chiuso e' ora immutabile e reclamabile
-    }
-
-    function decision(uint256 id) external view returns (bool decided, bool approved, address by) {
-        GovDecision storage g = _govDecisions[id];
-        return (g.decided, g.approved, g.by);
     }
 
     // ------------------------------------------------------------------ CITTADINI / CREATORI
