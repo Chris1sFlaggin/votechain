@@ -367,6 +367,58 @@ contract PollHubTest is Test {
         atk.doClaim(); // il rientro in receive() trova AlreadyClaimed (CEI) e viene ignorato
         assertEq(address(atk).balance - beforeBal, 0.01 ether); // pagato UNA sola volta (roi 0)
     }
+
+    /// Invariante di solvenza su stake ARBITRARI: la somma dei ROI non supera mai il
+    /// montepremi del round, e la polvere da divisione intera resta <= 1 wei per partizione.
+    function testFuzz_roiSolvency(uint128 sa, uint128 sb, uint128 sf1, uint128 sf2) public {
+        sa = uint128(bound(sa, 1, 1e18));
+        sb = uint128(bound(sb, 1, 1e18));
+        sf1 = uint128(bound(sf1, 1, 1e18));
+        sf2 = uint128(bound(sf2, 1, 1e18));
+
+        address al = makeAddr("fa");
+        vm.deal(al, 2e18);
+        address bo = makeAddr("fb");
+        vm.deal(bo, 2e18);
+        address c1 = makeAddr("fc1");
+        vm.deal(c1, 2e18);
+        address c2 = makeAddr("fc2");
+        vm.deal(c2, 2e18);
+
+        vm.prank(al);
+        uint256 ia = hub.createPetition{value: sa}("A", "d");
+        vm.prank(bo);
+        uint256 ib = hub.createPetition{value: sb}("B", "d");
+        vm.prank(c1);
+        uint256 i1 = hub.createPetition{value: sf1}("C1", "d");
+        vm.prank(c2);
+        uint256 i2 = hub.createPetition{value: sf2}("C2", "d");
+        _signN(ia, 5, 1000);
+        _signN(ib, 5, 2000);
+        _signN(i1, 5, 3000);
+        _signN(i2, 5, 4000);
+
+        vm.startPrank(gov);
+        hub.decide(ia, true);
+        hub.decide(ib, true);
+        hub.decide(i1, false);
+        hub.decide(i2, false);
+        hub.closePeriod();
+        vm.stopPrank();
+
+        uint256 forfeited = hub.forfeitedOf(0);
+        uint256 ba = al.balance;
+        uint256 bb = bo.balance;
+        vm.prank(al);
+        hub.claim(ia);
+        vm.prank(bo);
+        hub.claim(ib);
+        uint256 roiA = al.balance - ba - sa;
+        uint256 roiB = bo.balance - bb - sb;
+
+        assertLe(roiA + roiB, forfeited); // SOLVENZA: mai piu' del montepremi
+        assertLe(forfeited - (roiA + roiB), 1); // polvere da divisione intera <= 1 wei
+    }
 }
 
 /// Creator malevolo: prova a rientrare in claim() durante il pagamento.
