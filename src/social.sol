@@ -16,6 +16,7 @@ error AlreadyClaimed();
 error BelowMinVotes(); // sotto la soglia minima di firme
 error NotGovernment();
 error AlreadyDecided(); // decide chiamata due volte sulla stessa petizione
+error NotClosed(); // claim su un round non ancora chiuso
 
 contract PollHub {
     uint64 public constant MIN_SIGNATURES = 5; // soglia minima firme per essere approvabile (PoC)
@@ -51,7 +52,7 @@ contract PollHub {
     event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake);
     event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures);
     event PetitionDecided(uint256 indexed id, address indexed government, bool approved);
-    event StakeClaimed(uint256 indexed id, address indexed creator, uint128 amount);
+    event StakeClaimed(uint256 indexed id, address indexed creator, uint256 stake, uint256 roi);
     event PeriodClosed(uint256 indexed round, uint256 forfeited, uint256 approvedStake);
 
     modifier onlyGov() {
@@ -122,12 +123,18 @@ contract PollHub {
         if (msg.sender != p.creator) revert NotCreator();
         if (!p.decided) revert PollNotWon();
         if (!p.approved) revert PollNotWon();
+        if (p.decidedRound >= round) revert NotClosed(); // round del voto non ancora chiuso
         if (p.claimed) revert AlreadyClaimed();
         p.claimed = true; // checks-effects-interactions
-        uint128 amt = p.stake;
-        (bool ok,) = payable(p.creator).call{value: amt}("");
-        require(ok, "refund failed");
-        emit StakeClaimed(id, p.creator, amt);
+
+        uint256 stakeAmt = uint256(p.stake);
+        uint256 rr = p.decidedRound;
+        // quota proporzionale del montepremi del round (moltiplica PRIMA di dividere)
+        uint256 roi = approvedStakeOf[rr] == 0 ? 0 : (forfeitedOf[rr] * stakeAmt) / approvedStakeOf[rr];
+
+        (bool ok,) = payable(p.creator).call{value: stakeAmt + roi}("");
+        require(ok, "payout failed");
+        emit StakeClaimed(id, p.creator, stakeAmt, roi);
     }
 
     // -------------------------------------------------------------------------------- VIEWS

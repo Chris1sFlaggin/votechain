@@ -11,7 +11,8 @@ import {
     NotCreator,
     AlreadyClaimed,
     BelowMinVotes,
-    AlreadyDecided
+    AlreadyDecided,
+    NotClosed
 } from "../src/social.sol";
 
 /// Petizioni: cauzione + raccolta firme + rimborso se approvato dal governo (deployer).
@@ -95,6 +96,9 @@ contract PollHubTest is Test {
         (,,,,,, bool decided2,) = hub.getPetition(id);
         assertTrue(decided2);
 
+        vm.prank(gov);
+        hub.closePeriod(); // il round va chiuso prima di reclamare
+
         uint256 bal = creator.balance;
         vm.prank(creator);
         hub.claim(id);
@@ -141,7 +145,10 @@ contract PollHubTest is Test {
         address other = makeAddr("other");
         vm.prank(other);
         vm.expectRevert(NotCreator.selector);
-        hub.claim(id);
+        hub.claim(id); // NotCreator scatta prima del gating sul round
+
+        vm.prank(gov);
+        hub.closePeriod();
 
         vm.prank(creator);
         hub.claim(id);
@@ -186,5 +193,51 @@ contract PollHubTest is Test {
         emit PeriodClosed(0, 0, 0);
         vm.prank(gov);
         hub.closePeriod();
+    }
+
+    function test_claimRevertsBeforeClose() public {
+        vm.prank(creator);
+        uint256 id = hub.createPetition{value: 0.01 ether}("P", "d");
+        _signN(id, 5, 1);
+        vm.prank(gov);
+        hub.decide(id, true);
+        vm.prank(creator);
+        vm.expectRevert(NotClosed.selector);
+        hub.claim(id); // round non ancora chiuso
+    }
+
+    function test_proportionalRoi() public {
+        address alice = makeAddr("alice");
+        vm.deal(alice, 1 ether);
+        address bob = makeAddr("bob");
+        vm.deal(bob, 1 ether);
+        address carol = makeAddr("carol");
+        vm.deal(carol, 1 ether);
+
+        vm.prank(alice);
+        uint256 ia = hub.createPetition{value: 10}("A", "d");
+        vm.prank(bob);
+        uint256 ib = hub.createPetition{value: 30}("B", "d");
+        vm.prank(carol);
+        uint256 ic = hub.createPetition{value: 40}("C", "d");
+        _signN(ia, 5, 10);
+        _signN(ib, 5, 20);
+        _signN(ic, 5, 30);
+
+        vm.startPrank(gov);
+        hub.decide(ia, true);
+        hub.decide(ib, true);
+        hub.decide(ic, false);
+        hub.closePeriod();
+        vm.stopPrank();
+
+        uint256 ba = alice.balance;
+        uint256 bb = bob.balance;
+        vm.prank(alice);
+        hub.claim(ia);
+        vm.prank(bob);
+        hub.claim(ib);
+        assertEq(alice.balance - ba, 20); // 10 stake + 10 roi
+        assertEq(bob.balance - bb, 60); // 30 stake + 30 roi
     }
 }
