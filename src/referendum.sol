@@ -91,6 +91,8 @@ contract Referendum {
     }
 
     // -------------------------------------------------------------------------- governo
+    /// @notice Il governo fa avanzare la fase del referendum (es. Votazione -> Spoglio).
+    /// @param p Nuova fase; non può essere Closed (si usa close()).
     function setPhase(Phase p) external onlyGov {
         if (p == Phase.Closed) revert CloseOnlyFromTally();
         if (finalized) revert AlreadyFinalized();
@@ -158,26 +160,34 @@ contract Referendum {
     }
 
     // ------------------------------------------------------------------------------- views
+    /// @notice Gli id unici delle opzioni del referendum.
     function getOptions() external view returns (bytes32[] memory) {
         return options;
     }
 
+    /// @notice Le label leggibili delle opzioni (parallele a getOptions).
     function getLabels() external view returns (string[] memory) {
         return _labels;
     }
 
+    /// @notice Gli indirizzi che hanno partecipato (committato un voto).
     function getVoters() external view returns (address[] memory) {
         return voters;
     }
 
+    /// @notice Voti confermati per una data opzione (significativo solo dopo close()).
+    /// @param option Id dell'opzione.
     function result(bytes32 option) external view returns (uint256) {
         return tally[option];
     }
 
+    /// @notice Numero di partecipanti al referendum.
     function votersCount() external view returns (uint256) {
         return voters.length;
     }
 
+    /// @notice Verifica se un id corrisponde a un'opzione valida.
+    /// @param o Id da verificare.
     function isOption(bytes32 o) external view returns (bool) {
         for (uint256 i; i < options.length; ++i) {
             if (options[i] == o) return true;
@@ -204,6 +214,10 @@ contract GovFactory {
         government = msg.sender;
     }
 
+    /// @notice Il governo emette un nuovo referendum (minimo 2 opzioni).
+    /// @param title        Titolo del referendum.
+    /// @param optionLabels Label delle opzioni (>= 2).
+    /// @return Indirizzo del contratto Referendum creato.
     function createReferendum(string calldata title, string[] calldata optionLabels)
         external
         onlyGov
@@ -216,10 +230,12 @@ contract GovFactory {
         return address(r);
     }
 
+    /// @notice Indirizzi di tutti i referendum creati dalla factory.
     function getReferenda() external view returns (address[] memory) {
         return _referenda;
     }
 
+    /// @notice Numero di referendum creati.
     function count() external view returns (uint256) {
         return _referenda.length;
     }

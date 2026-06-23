@@ -59,8 +59,10 @@ contract PollHub {
     }
 
     // ------------------------------------------------------------------------------ GOVERNO
-    /// @notice Il GOVERNO (deployer) approva o respinge una raccolta che ha raggiunto
-    ///         MIN_SIGNATURES. Può cambiare idea (l'ultima decide) finché non è reclamata.
+    /// @notice Il GOVERNO (deployer) approva o respinge in via DEFINITIVA una raccolta che ha
+    ///         raggiunto MIN_SIGNATURES. La decisione si settla nel round corrente.
+    /// @param id      Indice della petizione.
+    /// @param approve true = approvata (lo stake concorre al ROI); false = respinta (alimenta il montepremi).
     function decide(uint256 id, bool approve) external onlyGov {
         Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert BadPoll();
@@ -86,6 +88,9 @@ contract PollHub {
 
     // ------------------------------------------------------------------ CITTADINI / CREATORI
     /// @notice Crea una raccolta firme depositando la cauzione (msg.value).
+    /// @param title       Titolo della petizione.
+    /// @param description Testo della petizione.
+    /// @return id         Indice assegnato alla nuova petizione.
     function createPetition(string calldata title, string calldata description) external payable returns (uint256 id) {
         if (bytes(title).length == 0 || bytes(description).length == 0 || msg.value == 0) revert BadPoll();
         id = _petitions.length;
@@ -98,6 +103,7 @@ contract PollHub {
     }
 
     /// @notice Firma una raccolta (una sola volta per indirizzo).
+    /// @param id Indice della petizione da firmare.
     function sign(uint256 id) external {
         Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert BadPoll();
@@ -108,7 +114,9 @@ contract PollHub {
         emit Signed(id, msg.sender, p.signatureCount);
     }
 
-    /// @notice Il creatore riprende la cauzione SE approvata dal governo.
+    /// @notice Reclama la cauzione di una petizione approvata PIÙ il ROI proporzionale, dopo che
+    ///         il governo ha chiuso il round (closePeriod). Riservato al creatore, una sola volta.
+    /// @param id Indice della petizione (il chiamante deve esserne il creatore).
     function claim(uint256 id) external {
         Petition storage p = _petitions[id];
         if (msg.sender != p.creator) revert NotCreator();
@@ -129,14 +137,21 @@ contract PollHub {
     }
 
     // -------------------------------------------------------------------------------- VIEWS
+    /// @notice Numero totale di petizioni create.
+    /// @return Conteggio delle petizioni.
     function petitionsCount() external view returns (uint256) {
         return _petitions.length;
     }
 
+    /// @notice Round in cui la petizione è stata decisa (il claim è possibile solo se quel round è chiuso).
+    /// @param id Indice della petizione.
+    /// @return Numero del round di decisione.
     function petitionRound(uint256 id) external view returns (uint256) {
         return _petitions[id].decidedRound;
     }
 
+    /// @notice Dati completi di una petizione: creator, title, description, stake, signatureCount, approved, decided, claimed.
+    /// @param id Indice della petizione.
     function getPetition(uint256 id)
         external
         view
@@ -155,6 +170,10 @@ contract PollHub {
         return (p.creator, p.title, p.description, p.stake, p.signatureCount, p.approved, p.decided, p.claimed);
     }
 
+    /// @notice Indica se un indirizzo ha già firmato una petizione.
+    /// @param id     Indice della petizione.
+    /// @param signer Indirizzo da verificare.
+    /// @return true se ha già firmato.
     function hasSignedPetition(uint256 id, address signer) external view returns (bool) {
         return hasSigned[id][signer];
     }
