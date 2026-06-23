@@ -30,7 +30,6 @@ error EmptyOptions();
 ///  PHASE 3 CLOSED  — close() conta, per wallet, il voto confermato.
 contract Referendum {
     enum Phase {
-        Setup,
         Voting,
         Tally,
         Closed
