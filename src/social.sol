@@ -15,6 +15,7 @@ error PollNotWon();
 error AlreadyClaimed();
 error BelowMinVotes(); // sotto la soglia minima di firme
 error NotGovernment();
+error AlreadyDecided(); // decide chiamata due volte sulla stessa petizione
 
 contract PollHub {
     uint64 public constant MIN_SIGNATURES = 5; // soglia minima firme per essere approvabile (PoC)
@@ -63,6 +64,7 @@ contract PollHub {
         Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert BadPoll();
         if (p.signatureCount < MIN_SIGNATURES) revert BelowMinVotes();
+        if (p.decided) revert AlreadyDecided(); // finalita': niente piu' cambio di idea
         _govDecisions[id] = GovDecision(true, approve, msg.sender);
         p.approved = approve;
         p.decided = true;

@@ -10,7 +10,8 @@ import {
     PollNotWon,
     NotCreator,
     AlreadyClaimed,
-    BelowMinVotes
+    BelowMinVotes,
+    AlreadyDecided
 } from "../src/social.sol";
 
 /// Petizioni: cauzione + raccolta firme + rimborso se approvato dal governo (deployer).
@@ -61,11 +62,17 @@ contract PollHubTest is Test {
         assertTrue(decided);
         assertTrue(approved);
         assertEq(by, gov);
-        // il governo può cambiare idea finché non è reclamato
+    }
+
+    function test_decideIsFinal() public {
+        vm.prank(creator);
+        uint256 id = hub.createPetition{value: 1 wei}("Titolo", "Desc");
+        _signN(id, 5, 1);
         vm.prank(gov);
-        hub.decide(id, false);
-        (, bool approved2,) = hub.decision(id);
-        assertFalse(approved2);
+        hub.decide(id, true);
+        vm.prank(gov);
+        vm.expectRevert(AlreadyDecided.selector);
+        hub.decide(id, false); // seconda decisione vietata
     }
 
     function test_createRequiresStake() public {
