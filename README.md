@@ -14,7 +14,7 @@ Il sistema coinvolge due categorie principali di attori istituzionali.
 
 ### Il Governo (Deployer)
 
-Il governo è l’entità che **effettua il deploy del contratto** sulla blockchain e ne detiene i privilegi amministrativi. Le sue responsabilità comprendono:
+Il governo è l’entità che **effettua il deploy del contratto** sulla blockchain e ne detiene i privilegi amministrativi. Le sue responsabilità comprendono: 
 
 -   Creare e configurare nuovi referendum (titolo, opzioni di voto, durata)
 -   Avviare la fase di spoglio al termine del periodo di votazione
