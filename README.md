@@ -1,211 +1,188 @@
-# VoteChain — codebase Solidity (Foundry)
+# VoteChain — Documentazione del Progetto PoC
 
-Core **on-chain** del sistema di voto referendario. Qui vive la logica: factory,
-geofencing, autorizzazione SPID (simulata), commit/reveal, conteggio. Pensato per
-essere guidato da un **frontend statico** (ethers.js + wallet, es. MetaMask),
-senza backend applicativo.
+## Panoramica del Sistema
 
-## Struttura
+VoteChain è un Proof of Concept (PoC) per un sistema di votazione elettronica decentralizzato basato su blockchain, progettato per supportare sia referendum che raccolte firme. L’obiettivo primario è garantire la **segretezza del voto**, la **resistenza alla manipolazione** e la **verificabilità pubblica** del processo elettorale, sfruttando le proprietà crittografiche e di immutabilità di una rete blockchain.
 
-```
-src/
- ├─ SystemBootstrap.sol       # deploy one-click di tutto (ideale per Remix)
- ├─ core/
- │   ├─ Referendum.sol        # referendum i — Fasi 1/2/3 (commit, reveal, close)
- │   └─ GovFactory.sol        # il Governo deploya un Referendum dedicato (new)
- ├─ auth/
- │   ├─ SPIDWalletRouter.sol  # SPID simulato + autorizzazione k_i + geofencing
- │   └─ Roles.sol             # access control minimale (ADMIN, ORACLE) — no OZ
- ├─ crypto/
- │   └─ VoteVerifier.sol      # libreria: digest keccak256(voto,nonce) + verifica()
- ├─ interfaces/
- │   └─ IReferendum.sol       # interfaccia standard del referendum (frontend/factory)
- └─ utils/
-     └─ Errors.sol            # custom errors (es. NonceGiaUtilizzato)
-test/
- ├─ Referendum.t.sol          # Fasi 1/2/3, geofencing, annullamento voti
- └─ CommitReveal.t.sol        # collisioni hash, unicità nonce, multi-reveal
-script/
- └─ DeploySystem.s.sol        # deploy + 2 referendum demo (SPID self-enroll, niente seed)
-web/                          # frontend statico (dApp): index.html, app.js, style.css
- └─ vendor/ethers.umd.min.js  # ethers v6 vendorizzato (sito self-contained)
-remix/
- └─ VotingSystem.flat.sol     # tutti i contratti in un file solo (incolla in Remix)
-.github/workflows/
- ├─ test.yml                  # CI Foundry (fmt + build + test)
- └─ pages.yml                 # deploy automatico di web/ su GitHub Pages
-```
+Il design architetturale si ispira al meccanismo **commit-reveal**: ogni votante prima pubblica un impegno crittografico (commit) del proprio voto, successivamente lo rivela (reveal) durante la fase di spoglio. Questo schema separa il momento dell’espressione del voto dal momento della sua decodifica, impedendo a chiunque — incluso il governo — di conoscere le intenzioni degli elettori prima della chiusura delle urne.
 
-## Ciclo di vita (in `Referendum.sol`)
+---
 
-- **Fase 1 — Voting**: solo `commit(digest, nonceTag)` con `digest = keccak256(voto,
-  nonce)` (nasconde il voto) e `nonceTag = keccak256(nonce)` (impegno sul solo nonce).
-  `verifica()` rifiuta un `nonceTag` già usato **dallo stesso wallet** → un nonce riusato
-  dà errore anche con un voto diverso, ma **solo confrontandolo con i tuoi voti** (due
-  elettori diversi possono usare lo stesso nonce). Rivoto consentito (nonce nuovo), conta
-  solo l'ultimo. **Nessun reveal qui**: prima dello spoglio non esiste alcun conteggio.
-- **Fase 2 — Tally (spoglio)**: niente nuovi digest; **si apre il `reveal`**.
-- **`reveal(nonce)`** (solo Fase 2): si passa **solo il nonce**. Il contratto prova
-  ogni opzione col nonce (riusando `VoteVerifier.matches`) e **deduce** quale combacia
-  col digest committato. Un reveal **corretto blocca** la scheda (`AlreadyRevealed` se
-  ritenti); un **nonce errato** non conferma nulla e si **può ritentare**.
-- **Fase 3 — Closed**: `close()` conteggia on-chain, per ogni wallet, il voto
-  **confermato** (già validato al reveal). Gli esiti sono visibili **solo da qui**
-  (prima restano sigillati anche nella UI).
+## Attori del Sistema
 
-## SPID simulato pensato per il sito statico
+Il sistema coinvolge due categorie principali di attori istituzionali.
 
-SPID reale è off-chain (IdP accreditato): non gira in una pagina statica. Qui è
-**proiettato on-chain** in modo che un frontend statico basti, con un'identità
-**fittizia auto-creata** (nessun profilo preimpostato):
+### Il Governo (Deployer)
 
-1. **un'identità per referendum**: prima di votare il cittadino firma con SPID
-   (simulato) un'autorizzazione **dedicata a quel referendum**:
-   `simulatedSpidLogin(referendum, giurisdizione)`. L'autorizzazione è legata alla
-   coppia `(referendum, wallet k_i)`: la stessa identità **non** vale per altri
-   referendum (per ognuno se ne crea una nuova) e **senza identità non si può
-   votare** (`commit` riverta `WalletNotAuthorized`);
-2. **accessibile fino alla scadenza**: nel sito l'identità (uno pseudonimo
-   derivato, solo a video) è visibile finché il referendum non viene **chiuso**;
-   dopo lo spoglio non viene più mostrata;
-3. **privacy (PoC)**: nome, cognome e codice fiscale non esistono nel flusso; on-chain
-   finisce **solo la giurisdizione** scelta — nessun dato personale, nemmeno uno
-   pseudonimo (lo pseudonimo mostrato è calcolato dal client, non è on-chain);
-4. il **geofencing** è applicato on-chain: `Referendum.commit` chiama
-   `router.canVote(address(this), msg.sender, giurisdizione)`.
+Il governo è l’entità che **effettua il deploy del contratto** sulla blockchain e ne detiene i privilegi amministrativi. Le sue responsabilità comprendono:
 
-> ⚠️ PoC: `simulatedSpidLogin` si fida del chiamante (chiunque può auto-iscrivere
-> una giurisdizione). In produzione l'autorizzazione la scriverebbe un
-> oracolo off-chain dopo una vera asserzione SPID, vincolando la giurisdizione
-> all'identità verificata. Vedi nota in cima a `SPIDWalletRouter.sol`.
+-   Creare e configurare nuovi referendum (titolo, opzioni di voto, durata)
+-   Avviare la fase di spoglio al termine del periodo di votazione
+-   Chiudere ufficialmente lo spoglio e calcolare i risultati
 
-## Build · Test · Deploy
+Il governo non ha accesso ai contenuti dei voti durante la fase di commit, garantendo così che il processo rimanga imparziale fino all’apertura ufficiale delle urne.
 
-```bash
-# build
-forge build
+### Il Cittadino (Votante)
 
-# test (34 test: fasi, reveal solo in spoglio, geofencing, unicità nonce, multi-reveal)
-forge test -vv
+Nel sistema reale (produzione), il cittadino si autenticherebbe tramite **SPID** (Sistema Pubblico di Identità Digitale), ottenendo un identificatore univoco federato. Nel PoC, questa fase è simulata. Le interazioni del cittadino con il sistema comprendono:
 
-# deploy locale
-anvil &                                   # nodo EVM locale
-forge script script/DeploySystem.s.sol \
-     --rpc-url http://127.0.0.1:8545 \
-     --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-     --broadcast
-# stampa gli indirizzi di SPIDWalletRouter / GovFactory / PollHub / Referendum
+-   Generazione del wallet dedicato al referendum
+-   Espressione e modifica del voto (fase di commit)
+-   Conferma del voto durante lo spoglio (fase di reveal)
 
-# deploy su Sepolia (serve una chiave con ETH di test + un RPC)
-export SEPOLIA_RPC="https://sepolia.infura.io/v3/<API_KEY>"
-forge script script/DeploySystem.s.sol \
-     --rpc-url "$SEPOLIA_RPC" --private-key 0x<chiave-con-ETH-di-test> --broadcast
-# poi incolla gli indirizzi stampati in web/config.js (router/factory/pollHub),
-# oppure deploya SystemBootstrap da Remix e incolla solo `bootstrap`.
-```
+---
 
-## Frontend statico (`web/`)
+## Architettura: Generazione del Wallet per Referendum
 
-dApp completa, **senza backend applicativo**: il wallet (MetaMask) firma, la
-catena fa il resto. Include login SPID simulato, voto (commit), reveal, conteggio
-e console governo. Avvio end-to-end locale:
+Una delle caratteristiche innovative di VoteChain è la creazione di un **wallet monouso per referendum**. Anziché utilizzare un wallet generico del cittadino, viene derivato un indirizzo Ethereum specifico per ogni coppia (cittadino, referendum).
 
-```bash
-# 1. nodo EVM locale (raggiungibile anche dal telefono in LAN)
-anvil --host 0.0.0.0
+Il processo di derivazione avviene come segue:
 
-# 2. deploy + seeding (in un secondo terminale)
-forge script script/DeploySystem.s.sol --rpc-url http://127.0.0.1:8545 \
-     --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --broadcast
+seed = hash(SPID\_ID, referendum\_key)
 
-# 3. servi il sito statico
-cd web && python3 -m http.server 8081 --bind 0.0.0.0
-# apri http://localhost:8081 (o http://<IP-LAN>:8081 dal telefono)
-```
+Dove `referendum_key` è una chiave autogenerata dal contratto al momento della creazione del referendum. Da questo seed viene derivato deterministicamente un wallet Ethereum (coppia chiave privata / indirizzo pubblico). Questo meccanismo garantisce che:
 
-In MetaMask: aggiungi la rete anvil (RPC `http://127.0.0.1:8545`, chainId
-`31337`) e importa una chiave anvil. La chiave **account 0** è il governo (può
-emanare/gestire); le altre sono elettori. Gli indirizzi di `SPIDWalletRouter` e
-`GovFactory` sono già precompilati nel pannello *Configurazione* (default di un
-anvil appena avviato); altrimenti incolla quelli stampati dallo script.
+1.  Lo stesso cittadino generi sempre lo stesso wallet per lo stesso referendum (riproducibilità)
+2.  Il wallet sia inutilizzabile in qualsiasi altro contesto (isolamento)
+3.  Non sia possibile correlare l’identità SPID all’indirizzo on-chain senza conoscere entrambi i segreti (anonimizzazione)
 
-Le chiamate che il frontend fa ai contratti (identiche all'e2e provato con
-`cast`):
+---
 
-```js
-await router.simulatedSpidLogin(referendum.target, "Italia"); // identità per QUESTO referendum
-const ids      = await referendum.getOptions();   // id UNICI delle opzioni (label != id)
-const digest   = ethers.solidityPackedKeccak256(["bytes32","string"], [ids[0], "tramonto-42"]);
-const nonceTag = ethers.solidityPackedKeccak256(["string"], ["tramonto-42"]); // impegno sul nonce
-await referendum.commit(digest, nonceTag);   // Fase 1 (commit; nonce riusato = errore, anche con voto diverso)
-await referendum.setPhase(2);                // governo: apre lo spoglio
-await referendum.reveal("tramonto-42");      // Fase 2: SOLO il nonce, il voto lo deduce il contratto
-await referendum.close();                    // governo: conteggio ufficiale
-```
+## Fase 1 — Commit: Espressione del Voto
 
-Letture (stato, opzioni, risultati, conteggio provvisorio) via `IReferendum` ed
-eventi `Committed`/`Revealed`/`Finalized`.
+### Offuscamento dei Valori di Voto
 
-## Esecuzione in Remix IDE
+Per impedire l’analisi statistica delle transazioni on-chain, i valori che rappresentano le opzioni di voto (es. `SI`, `NO`) sono mappati a **identificatori opachi generati casualmente per ogni referendum**. Ad esempio:
 
-Senza installare nulla, su <https://remix.ethereum.org>:
+| Opzione | Valore Opaco (esempio) |
+| --- | --- |
+| SI | `0x3f7a9c…` |
+| NO | `0xb21e04…` |
+| ASTENSIONE | `0x9d05fe…` |
 
-1. **Nuovo file** → incolla il contenuto di `remix/VotingSystem.flat.sol` (tutti i
-   contratti in un file solo, già appiattito con `forge flatten`).
-2. **Solidity Compiler** → versione `0.8.x` → *Compile*.
-3. **Deploy & Run** → Environment:
-   - *Remix VM* per provare offline, oppure
-   - *Injected Provider — MetaMask* per deployare su **Sepolia** (serve un po' di ETH di test).
-4. Deploya **`SystemBootstrap`** (un clic): crea Router + Factory + PollHub, ti rende
-   ADMIN/ORACLE e governo di Italia e San Marino, e registra anche un **secondo
-   wallet governativo fisso** (`EXTRA_GOV = 0x22a2…834B54`).
-5. Espandi `SystemBootstrap` → leggi `router()` e `factory()` (o `addresses()`).
-6. *At Address* su `GovFactory` (indirizzo `factory()`) → `createReferendum("Titolo","Italia",["si","no"])`
-   (le opzioni sono **testo**: il contratto assegna a ognuna un **id univoco**, così due
-   opzioni con lo stesso testo restano distinte; la label si legge da `getLabels()`).
-7. Da un altro account: *At Address* su `SPIDWalletRouter` →
-   `simulatedSpidLogin(<indirizzo del Referendum>, "Italia")` (identità fittizia
-   **dedicata a quel referendum**, nessun dato personale on-chain), poi `commit`
-   (Fase 1) e, dopo che il governo apre lo spoglio, `reveal` (Fase 2) sul `Referendum`.
+Questa mappatura è nota solo al contratto, e viene rigenerata ad ogni referendum, rendendo impossibile dedurre il voto dall’osservazione della transazione.
 
-I 34 test girano con Foundry (`forge test`), non in Remix (usano `forge-std`).
+### Struttura del Commit
 
-## Deploy su GitHub Pages
+Il cittadino sceglie il proprio voto e inserisce un **nonce** (password monouso a sua scelta). Il commit viene costruito come:
 
-Il frontend `web/` è completamente statico → si pubblica su GitHub Pages.
+commit = hash( voto\_opaco, nonce)
 
-1. Porta la cartella `votechain/` su un repo GitHub (è già un repo git con `forge init`):
-   `git add -A && git commit -m "votechain" && git push`.
-2. Repo → **Settings → Pages → Source: GitHub Actions**. Il workflow
-   `.github/workflows/pages.yml` pubblica `web/` a ogni push su `main`/`master`.
-3. Deploya i contratti **su Sepolia** (via Remix, vedi sopra) e annota
-   l'indirizzo di `SystemBootstrap`.
-4. Apri il sito pubblicato, in **⚙️ Configurazione** incolla l'indirizzo di
-   `SystemBootstrap` e premi **Carica** (ricava Router+Factory, salvati nel
-   browser). In MetaMask resta selezionata Sepolia.
+Questo digest viene inviato on-chain tramite una transazione dal wallet dedicato al referendum. Il contratto registra il commit senza poter risalire al voto effettivo, perché non conosce né il nonce né la mappatura invertita del voto opaco in quel momento.
 
-> GitHub Pages serve solo file statici (niente backend): coerente con l'idea che
-> tutta la logica sta on-chain e l'unico "off-chain" è la simulazione SPID, qui
-> ridotta a una chiamata on-chain (`simulatedSpidLogin`).
+### Modifica del Voto
 
-## Requisiti spec → dove
+Il cittadino può **cambiare il proprio voto** prima della chiusura della fase di commit. Per farlo, si ri-autentica con le stesse modalità (SPID + referendum key → wallet), esprime un nuovo voto e sceglie un **nuovo nonce**. Prima di registrare il nuovo commit, il contratto esegue una **funzione di verifica** che:
 
-| Requisito | Dove |
-|---|---|
-| Un contratto per referendum + factory | `GovFactory.createReferendum` → `new Referendum` |
-| Geofencing (voto solo nella propria giurisdizione) | `SPIDWalletRouter.canVote` in `Referendum.commit` |
-| Identità SPID **una per referendum** (non riusabile su altri) | `SPIDWalletRouter._wallets[referendum][k_i]` + `simulatedSpidLogin(referendum, giurisdizione)` |
-| Niente voto senza identità creata | `Referendum.commit` → `WalletNotAuthorized` se manca l'identità per quel referendum |
-| Identità accessibile fino alla scadenza (chiusura) | UI: pseudonimo mostrato finché `phase != Closed` |
-| `digest = keccak256(voto, nonce)` | `VoteVerifier.digest` |
-| Opzioni con **id univoco** (due testi uguali restano distinti) | `Referendum` ctor: `id=keccak(this,index,label)`; label in `getLabels()` |
-| `verifica()` unicità del **nonce per-wallet** (errore anche con voto diverso, ma solo sui tuoi voti) | `VoteVerifier.verifica` su `usedNonce[msg.sender][keccak(nonce)]` in `Referendum.commit` |
-| Rivoto con nonce nuovo, vale l'ultimo | `Referendum.commit` (lastDigest) |
-| Reveal col **solo nonce** (voto dedotto), **solo Fase 2**; corretto blocca, errato ritentabile | `Referendum.reveal(nonce)` (gate su `Phase.Tally` + `AlreadyRevealed`) |
-| Conteggio differito alla chiusura | `Referendum.close` |
-| Esiti sigillati fino alla chiusura | reveal solo in spoglio + UI mostra le barre solo se `finalized` |
-| Nessun dato personale on-chain (solo giurisdizione) | `SPIDWalletRouter` (niente `cfHash`) |
-| Ruoli Governo/Oracolo/Admin | `Roles.sol` + registrazioni nel Router |
-| Secondo wallet governativo fisso | `SystemBootstrap.EXTRA_GOV` (Italia + San Marino) |
-| Endorsement del governo sui sondaggi social (approva/disapprova, on-chain) | `PollHub.endorse(id, approve)` gated su `router.isAuthority(msg.sender)` |
-| Custom errors | `Errors.sol` |
+1.  Recupera tutte le transazioni storiche emesse dal wallet del cittadino per quel referendum
+2.  Per ogni transazione, calcola `hash(voto_opaco_X || nonce_proposto)` per tutte le opzioni di voto possibili `X`
+3.  Controlla che nessuno dei digest calcolati coincida con il commit della transazione esistente
+
+Se il nuovo nonce non compare in nessuna transazione precedente, il nuovo commit viene accettato e registrato on-chain. Le transazioni di commit precedenti rimangono sulla blockchain ma diventano **irrilevanti** ai fini dello spoglio, poiché non sarà mai rivelato il nonce ad esse associato.
+
+---
+
+## Fase 2 — Reveal: Conferma e Spoglio
+
+### Avvio dello Spoglio
+
+Trascorso il periodo di votazione configurato dal governo, viene invocata la funzione di apertura dello spoglio. Da questo momento i cittadini non possono più modificare il proprio voto e devono procedere alla fase di conferma.
+
+### Conferma del Voto (Reveal)
+
+Ogni cittadino ri-accede al sistema (tramite SPID + referendum key → stesso wallet deterministico) e **pubblica il proprio nonce** in chiaro in una transazione di reveal. Il contratto verifica che:
+
+hash( voto\_dichiarato, nonce\_rivelato) = commit\_registrato
+
+Se la verifica fallisce (nonce errato o voto dichiarato non corrispondente), il cittadino può ripetere la fase di conferma fornendo i dati corretti. Se la verifica ha successo, la transazione di reveal viene accettata e il voto è considerato confermato.
+
+### Conteggio dei Voti
+
+Una volta che tutti i cittadini hanno completato il reveal (o scaduto il termine), il governo invoca la funzione di chiusura dello spoglio. Il conteggio avviene tramite la stessa **funzione di verifica** usata in fase di commit, applicata ora in modalità di lettura aggregata:
+
+Per ogni wallet `i` di cittadino e per ogni opzione di voto `V`:
+
+exists transazione(t\_i) t.c. hash(voto\_opaco(V) , nonce\_rivelato\_i) = commit}(t\_i)  
+\]
+
+Se questa condizione è soddisfatta, il voto del cittadino `i` per l’opzione `V` viene conteggiato. Le transazioni di commit precedenti (relative a voti poi modificati) non vengono mai conteggiate, poiché i relativi nonce non sono mai stati pubblicati e non esiste alcun nonce rivelato che le faccia combaciare.
+
+---
+
+## Schema del Flusso Completo
+
+\[Governo\] │ ├─ deploy contratto └─ crea referendum (titolo, opzioni, referendum\_key, durata) │ ▼\[Cittadino\] ─── SPID\_ID + referendum\_key │ ▼ genera wallet dedicato │ sceglie voto + nonce │ commit = hash(voto\_opaco || nonce) ──▶ \[Blockchain\] │ (opzionale) modifica voto con nuovo nonce │ ▼\[Governo\] avvia spoglio │ ▼\[Cittadino\] pubblica nonce in reveal ──────────▶ \[Blockchain\] │ ▼\[Governo\] chiude spoglio → conteggio automatico via funzione verifica
+
+---
+
+## Proprietà di Sicurezza
+
+Il sistema garantisce le seguenti proprietà crittografiche e di sistema:
+
+-   **Segretezza ante-spoglio**: nessuno può conoscere il contenuto dei voti prima del reveal, poiché i commit sono hash non invertibili senza il nonce
+-   **Non-correlabilità**: il wallet derivato da SPID + referendum\_key non è riconducibile all’identità reale senza entrambi i segreti
+-   **Unicità del voto**: la funzione di verifica impedisce riuso di nonce, garantendo che ogni votante conti esattamente una volta
+-   **Resistenza alla coercizione**: il cittadino può cambiare voto liberamente fino alla chiusura del commit, e il voto modificato non lascia tracce collegabili
+-   **Immutabilità e auditabilità**: tutte le transazioni sono pubbliche e verificabili su blockchain, ma decodificabili solo con il nonce rivelato
+
+---
+
+## Modulo Raccolta Firme: Proposte dei Cittadini
+
+### Obiettivo e Logica Generale
+
+Il modulo di raccolta firme consente ai cittadini di **avanzare proposte di legge o istanze formali** a un’istituzione, raccogliendo un numero sufficiente di adesioni on-chain per raggiungere il quorum necessario alla presa in carico. Il flusso è deliberatamente più semplice rispetto al referendum, poiché la firma non è segreta: l’atto di sostenere una proposta è pubblico e verificabile.
+
+Tuttavia, per prevenire lo spam di proposte infondate che ingaserebbero la blockchain e l’agenda istituzionale, il sistema introduce un meccanismo di **cauzione anti-spam**: chiunque voglia avanzare una proposta deve bloccare una quantità di token nel contratto. Questa cauzione viene gestita automaticamente dallo smart contract in base all’esito della proposta.
+
+### Ciclo di Vita di una Proposta
+
+**1\. Creazione della Proposta (Proponente)**
+
+Un cittadino autenticato via SPID genera il proprio wallet dedicato alla proposta (stesso meccanismo: `hash(SPID_ID || proposal_key)`). Per avviare la raccolta firme, il proponente invia una transazione che include:
+
+-   Il testo della proposta
+-   Un **deposito cauzionale** in token (es. ETH o token di governance), la cui soglia minima è definita dal contratto
+
+La cauzione viene **bloccata (locked) nello smart contract** e non è accessibile né al proponente né al governo fino alla risoluzione della proposta.
+
+**2\. Firma della Proposta (Firmatari)**
+
+Ogni cittadino che vuole aderire accede con il proprio wallet dedicato alla proposta (derivato da `hash(SPID_ID || proposal_key)`) e invia una transazione di firma. A differenza del referendum, la firma è in chiaro: non è richiesto meccanismo commit-reveal perché l’anonimato non è necessario — sostenere una proposta è un atto politico pubblico.
+
+Il contratto tiene traccia di tutti i wallet firmatari e verifica che ciascun wallet abbia firmato al più una volta (unicità garantita dall’isolamento del wallet per proposta).
+
+**3\. Raggiungimento del Quorum**
+
+Alla scadenza del periodo di raccolta, il contratto verifica automaticamente se il numero di firme valide ha raggiunto la soglia (quorum) stabilita al momento della creazione. Esistono due esiti:
+
+| Esito | Condizione | Conseguenza sulla Cauzione |
+| --- | --- | --- |
+| **Proposta ammessa** | Firme ≥ quorum | La cauzione viene **restituita** al proponente |
+| **Proposta respinta** | Firme < quorum | La cauzione viene **trattenuta** (es. devoluta a un fondo comune o bruciata) |
+
+**4\. Valutazione Istituzionale**
+
+Se la proposta raggiunge il quorum, viene formalmente trasmessa all’istituzione (governo). L’istituzione può approvarla, respingerla o trasformarla in referendum. In tutti i casi, la restituzione della cauzione avviene al raggiungimento del quorum e non dipende dall’approvazione politica: il sistema incentiva la presentazione di proposte **con reale consenso popolare**, non necessariamente approvate dal governo.
+
+### Logica Anti-Spam della Cauzione
+
+Il meccanismo della cauzione risolve un problema classico dei sistemi di governance decentralizzata: senza un costo, chiunque potrebbe inondare il sistema con proposte prive di sostegno reale. La cauzione agisce come **segnale di credibilità**:
+
+-   Il proponente ha un incentivo economico a raccogliere firme reali, poiché solo raggiungendo il quorum rientra in possesso della cauzione
+-   I firmatari non pagano alcuna cauzione, abbassando la barriera alla partecipazione democratica
+-   Il costo di una proposta fallita è interamente a carico del proponente, disincentivando lo spam senza penalizzare i cittadini sostenitori
+
+## Limitazioni del PoC e Sviluppi Futuri
+
+Il presente PoC semplifica o omette alcune componenti presenti nel sistema reale:
+
+| Componente | PoC | Sistema Reale |
+| --- | --- | --- |
+| Autenticazione | Simulata | SPID (OpenID Connect / SAML) |
+| Rete blockchain | Testnet / locale | Rete pubblica o permissioned enterprise |
+| Raccolta firme | Schema base | Firma digitale on-chain con verifica legale |
+| Chiave di sessione referendum | Generata in-app | HSM governativo con audit log |
+| Gestione wallet | Client-side | Secure enclave o MPC wallet |
+
+Tra i miglioramenti previsti per la versione di produzione figurano l’integrazione con l’infrastruttura SPID ufficiale, l’adozione di **zero-knowledge proof** per la verifica dei commit senza rivelare il nonce intermedio, e l’implementazione di un sistema di **threshold decryption** per lo spoglio distribuito che non dipenda dalla singola azione governativa.
