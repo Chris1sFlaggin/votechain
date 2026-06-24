@@ -8,7 +8,6 @@ const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { factory: "", pollHub: "
 
 const FACTORY_ABI = [
   "function government() view returns (address)",
-  "function EXTRA_GOV() view returns (address)",
   "function createReferendum(string, string[]) returns (address)",
   "function getReferenda() view returns (address[])",
 ];
@@ -50,6 +49,8 @@ const ADDR = { factory: "", pollHub: "" };
 let IS_GOV = false;
 let GOV_ADDR = "";
 let IS_POLL_GOV = false;
+// secondo governo fisso (hardcoded on-chain in GovFactory/Referendum/PollHub)
+const EXTRA_GOV = "0x22a2bc6E24FBa136023A126560E2D2490A834B54".toLowerCase();
 
 const $ = (id) => document.getElementById(id);
 const labelOf = (id) => LABELS[id] || id;
@@ -132,10 +133,8 @@ function initContracts() {
 async function refresh() {
   if (!S.account || !S.factory) return;
   try { GOV_ADDR = await S.factory.government(); } catch { GOV_ADDR = ""; }
-  let extraGov = "";
-  try { extraGov = await S.factory.EXTRA_GOV(); } catch { /* contratto vecchio: nessun secondo gov */ }
   const me = S.account.toLowerCase();
-  IS_GOV = (!!GOV_ADDR && GOV_ADDR.toLowerCase() === me) || (!!extraGov && extraGov.toLowerCase() === me);
+  IS_GOV = (!!GOV_ADDR && GOV_ADDR.toLowerCase() === me) || me === EXTRA_GOV;
   renderIdentity();
   gateAreas();
   await renderReferenda();
@@ -204,7 +203,7 @@ async function card(addr) {
   const phase = Number(phaseRaw);
   // opzione = { id univoco (per il voto), label (testo mostrato, può ripetersi) }
   const options = ids.map((id, i) => ({ id, label: labels[i] ?? decodeOpt(id) }));
-  const isGovOfThis = S.account && gov.toLowerCase() === S.account.toLowerCase();
+  const isGovOfThis = S.account && (gov.toLowerCase() === S.account.toLowerCase() || S.account.toLowerCase() === EXTRA_GOV);
   const me = await c.ballots(S.account).catch(() => null);
 
   // SEGRETEZZA: gli esiti sono sigillati finché il referendum non è chiuso (close()).
@@ -223,15 +222,16 @@ async function card(addr) {
 
   let actions = "";
   if (IS_GOV && isGovOfThis) {
+    // enum Phase: Voting=0, Tally=1, Closed=2
     actions = `<div class="gov-ctl">
-      <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="2" ${phase !== 1 ? "disabled" : ""}>Avvia spoglio</button>
-      <button class="btn btn--sm btn--gov" data-act="close" data-ref="${addr}" ${phase !== 2 ? "disabled" : ""}>Chiudi e conta</button>
+      <button class="btn btn--sm" data-act="phase" data-ref="${addr}" data-p="1" ${phase !== 0 ? "disabled" : ""}>Avvia spoglio</button>
+      <button class="btn btn--sm btn--gov" data-act="close" data-ref="${addr}" ${phase !== 1 ? "disabled" : ""}>Chiudi e conta</button>
     </div>`;
   } else if (!IS_GOV) {
-    // voto aperto: qualsiasi wallet vota in fase di Votazione
-    if (phase === 1) actions += voteForm(addr, options);
-    // reveal solo in spoglio e finché NON confermato
-    if (phase === 2 && me && me.committed && !me.confirmed) actions += revealForm(addr);
+    // voto aperto: qualsiasi wallet vota in fase di Votazione (0)
+    if (phase === 0) actions += voteForm(addr, options);
+    // reveal solo in spoglio (Tally=1) e finché NON confermato
+    if (phase === 1 && me && me.committed && !me.confirmed) actions += revealForm(addr);
   }
 
   const status = me && me.committed
@@ -488,7 +488,8 @@ async function renderSocial() {
   if (connected) {
     try {
       const pg = await S.pollHub.government();
-      IS_POLL_GOV = !!pg && pg.toLowerCase() === S.account.toLowerCase();
+      const me = S.account.toLowerCase();
+      IS_POLL_GOV = (!!pg && pg.toLowerCase() === me) || me === EXTRA_GOV;
     } catch { IS_POLL_GOV = false; }
   } else {
     IS_POLL_GOV = false;

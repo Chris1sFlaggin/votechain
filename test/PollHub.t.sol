@@ -22,6 +22,7 @@ import {
 contract PollHubTest is Test {
     PollHub hub;
     address gov = makeAddr("gov"); // deployer = governo = "Stato"
+    address constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54; // secondo gov fisso
     address creator = makeAddr("creator");
 
     function setUp() public {
@@ -103,6 +104,16 @@ contract PollHubTest is Test {
         uint256 id = _create(hub.MIN_STAKE());
         _signN(id, 5, 1);
         vm.prank(gov);
+        hub.decide(id, true);
+        (,,,,,, bool approved, bool decided,) = hub.getPetition(id);
+        assertTrue(decided);
+        assertTrue(approved);
+    }
+
+    function test_extraGovCanDecide() public {
+        uint256 id = _create(hub.MIN_STAKE());
+        _signN(id, 5, 1);
+        vm.prank(EXTRA_GOV); // secondo gov, non il deployer
         hub.decide(id, true);
         (,,,,,, bool approved, bool decided,) = hub.getPetition(id);
         assertTrue(decided);

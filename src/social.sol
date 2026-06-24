@@ -28,6 +28,7 @@ contract PollHub {
     uint64 public constant POLL_TIMEOUT = 7 days; // durata raccolta, uguale per ogni petizione
 
     address public immutable government; // chi ha fatto il deploy = "Stato"
+    address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54; // secondo gov fisso
 
     struct Petition {
         // campi ordinati per impacchettamento: creator + 3 bool in uno slot,
@@ -54,7 +55,7 @@ contract PollHub {
     );
 
     modifier onlyGov() {
-        if (msg.sender != government) revert NotGovernment();
+        if (msg.sender != government && msg.sender != EXTRA_GOV) revert NotGovernment();
         _;
     }
 

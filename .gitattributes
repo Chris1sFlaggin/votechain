@@ -1,0 +1,11 @@
+# Statistiche linguaggio (GitHub Linguist).
+# Il progetto è valutato sui contratti Solidity (src/, test/, script/).
+# La dApp in web/ è un client PoC: la marchiamo come vendorizzata così
+# non pesa sulla barra dei linguaggi (JS/CSS/HTML esclusi dai conteggi).
+web/** linguist-vendored
+
+# libreria di terze parti (ethers.js): vendorizzata e non generata da noi
+web/vendor/** linguist-vendored linguist-generated
+
+# output di build committato: dati generati, esclusi dalle statistiche
+artifacts/** linguist-generated
