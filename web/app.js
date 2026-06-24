@@ -2,12 +2,13 @@
    Indirizzi in config.js. Ruoli mutuamente esclusivi: l'account registrato come Governo
    on-chain vede SOLO il pannello Governo; tutti gli altri sono cittadini e votano. */
 
-const PHASES = ["Configurazione", "Votazione aperta", "Spoglio in corso", "Referendum chiuso"];
+const PHASES = ["Votazione aperta", "Spoglio in corso", "Referendum chiuso"];
 const LABELS = { si: "Sì", no: "No", bianca: "Scheda Bianca" };
 const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { factory: "", pollHub: "", chainId: 11155111 };
 
 const FACTORY_ABI = [
   "function government() view returns (address)",
+  "function EXTRA_GOV() view returns (address)",
   "function createReferendum(string, string[]) returns (address)",
   "function getReferenda() view returns (address[])",
 ];
@@ -131,7 +132,10 @@ function initContracts() {
 async function refresh() {
   if (!S.account || !S.factory) return;
   try { GOV_ADDR = await S.factory.government(); } catch { GOV_ADDR = ""; }
-  IS_GOV = !!GOV_ADDR && GOV_ADDR.toLowerCase() === S.account.toLowerCase();
+  let extraGov = "";
+  try { extraGov = await S.factory.EXTRA_GOV(); } catch { /* contratto vecchio: nessun secondo gov */ }
+  const me = S.account.toLowerCase();
+  IS_GOV = (!!GOV_ADDR && GOV_ADDR.toLowerCase() === me) || (!!extraGov && extraGov.toLowerCase() === me);
   renderIdentity();
   gateAreas();
   await renderReferenda();
@@ -316,7 +320,7 @@ const EXPLORER_IFACE = new ethers.Interface([
   "event PetitionDecided(uint256 indexed id, address indexed government, bool approved)",
   "event StakeResolved(uint256 indexed id, address indexed creator, uint256 refunded, uint256 toState, bool reachedQuorum)",
 ]);
-const PHASE_NAME = ["Configurazione", "Votazione", "Spoglio", "Chiuso"];
+const PHASE_NAME = ["Votazione", "Spoglio", "Chiuso"];
 const shortA = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");
 const shortH = (h) => (h ? `${h.slice(0, 10)}…` : "—");
 
@@ -678,16 +682,18 @@ async function pollCard(id) {
   if (decided) badge = approved ? `<span class="won">APPROVATA</span>` : `<span class="pill">Respinta</span>`;
   else badge = `<span class="prog-pill">${total} firme</span>`;
 
+  // liquidabile subito se ha il quorum, altrimenti solo a raccolta scaduta
+  const claimable = reachedQuorum || expired;
   let claim = "";
   if (isCreator && claimed) {
     claim = `<span class="muted" style="display:block;margin-top:10px;">cauzione liquidata</span>`;
-  } else if (isCreator && expired) {
+  } else if (isCreator && claimable) {
     const lbl = reachedQuorum
       ? `Reclama ${ethers.formatEther(expectedPayout)} ETH (rimborso integrale)`
       : `Reclama ${ethers.formatEther(expectedPayout)} ETH (50% · penale allo Stato)`;
     claim = `<button class="btn btn--social poll-claim" data-claim="${id}">${lbl}</button>`;
   } else if (isCreator) {
-    claim = `<span class="muted" style="display:block;margin-top:10px;">Liquidabile dopo la scadenza (${new Date(deadlineTs * 1000).toLocaleString("it-IT")})</span>`;
+    claim = `<span class="muted" style="display:block;margin-top:10px;">Liquidabile al quorum o dopo la scadenza (${new Date(deadlineTs * 1000).toLocaleString("it-IT")})</span>`;
   }
 
   const tags = `${isCreator ? '<span class="pill">tua</span>' : ""}${hasSigned ? '<span class="pill pill--ok">hai firmato</span>' : ""}`;

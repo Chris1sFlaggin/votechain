@@ -18,6 +18,7 @@ contract ReferendumTest is Test {
     Referendum ref;
 
     address gov = makeAddr("gov"); // deployer della factory = governo
+    address constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54; // secondo gov fisso
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
 
@@ -157,5 +158,24 @@ contract ReferendumTest is Test {
         vm.prank(alice);
         vm.expectRevert(NotGovernment.selector);
         factory.createReferendum("X", _labels());
+    }
+
+    function test_extraGovCanCreate() public {
+        vm.prank(EXTRA_GOV);
+        address r = factory.createReferendum("Extra", _labels());
+        assertTrue(r != address(0));
+    }
+
+    function test_extraGovDrivesPhases() public {
+        // referendum creato dal deployer: anche EXTRA_GOV può guidarne le fasi
+        vm.prank(EXTRA_GOV);
+        ref.setPhase(Referendum.Phase.Tally);
+        assertEq(uint8(ref.phase()), uint8(Referendum.Phase.Tally));
+    }
+
+    function test_extraGovCannotVote() public {
+        vm.prank(EXTRA_GOV);
+        vm.expectRevert(GovernmentCannotVote.selector);
+        ref.commit(_digest(SI, "g"), _nt("g"));
     }
 }

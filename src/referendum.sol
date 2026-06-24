@@ -36,6 +36,7 @@ contract Referendum {
     }
 
     address public immutable government;
+    address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54; // secondo gov fisso
     string public title;
     Phase public phase;
     bool public finalized;
@@ -66,7 +67,7 @@ contract Referendum {
     event Finalized(uint256 valid, uint256 nullified);
 
     modifier onlyGov() {
-        if (msg.sender != government) revert NotGovernment();
+        if (msg.sender != government && msg.sender != EXTRA_GOV) revert NotGovernment();
         _;
     }
 
@@ -123,7 +124,7 @@ contract Referendum {
     ///                 è per-wallet su questo (nonce riusato = errore, con qualunque voto).
     function commit(bytes32 d, bytes32 nonceTag) external {
         if (phase != Phase.Voting) revert VotingNotOpen();
-        if (msg.sender == government) revert GovernmentCannotVote(); // separazione dei poteri
+        if (msg.sender == government || msg.sender == EXTRA_GOV) revert GovernmentCannotVote(); // separazione dei poteri
         if (usedNonce[msg.sender][nonceTag]) revert NonceGiaUtilizzato();
         usedNonce[msg.sender][nonceTag] = true;
         Ballot storage b = ballots[msg.sender];
@@ -200,12 +201,13 @@ contract Referendum {
 ///         Ogni referendum creato eredita lo stesso governo.
 contract GovFactory {
     address public immutable government;
+    address public constant EXTRA_GOV = 0x22a2bc6E24FBa136023A126560E2D2490A834B54; // secondo gov fisso
     address[] private _referenda;
 
     event ReferendumCreated(address indexed referendum, address indexed government, string title);
 
     modifier onlyGov() {
-        if (msg.sender != government) revert NotGovernment();
+        if (msg.sender != government && msg.sender != EXTRA_GOV) revert NotGovernment();
         _;
     }
 

@@ -92,19 +92,21 @@ contract PollHub {
         emit Signed(id, msg.sender, p.signatureCount);
     }
 
-    /// @notice Liquida la cauzione dopo la scadenza. Riservato al creatore, una sola volta.
-    ///         Quorum raggiunto -> 100% al creatore; sotto soglia -> 50% allo Stato + 50% al
-    ///         creatore (il resto della divisione intera va al creatore: nessun wei perso).
+    /// @notice Liquida la cauzione. Riservato al creatore, una sola volta. Se la raccolta ha
+    ///         raggiunto il quorum (MIN_SIGNATURES) è liquidabile SUBITO, anche prima della
+    ///         scadenza, con rimborso integrale; altrimenti solo a raccolta scaduta, con penale
+    ///         del 50% allo Stato (il resto della divisione intera va al creatore: nessun wei perso).
     /// @param id Indice della petizione (il chiamante deve esserne il creatore).
     function claim(uint256 id) external {
         Petition storage p = _petitions[id];
         if (msg.sender != p.creator) revert NotCreator();
-        if (block.timestamp < p.createdAt + POLL_TIMEOUT) revert StillOpen();
         if (p.claimed) revert AlreadyClaimed();
+        bool reached = p.signatureCount >= MIN_SIGNATURES;
+        // quorum raggiunto -> claim anticipato consentito; altrimenti solo dopo la scadenza
+        if (!reached && block.timestamp < p.createdAt + POLL_TIMEOUT) revert StillOpen();
         p.claimed = true; // checks-effects-interactions
 
         uint256 stakeAmt = uint256(p.stake);
-        bool reached = p.signatureCount >= MIN_SIGNATURES;
         uint256 toState = reached ? 0 : stakeAmt / 2; // penale anti-spam
         uint256 refunded = stakeAmt - toState; // creatore (incassa l'eventuale resto dispari)
 

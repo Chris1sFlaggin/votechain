@@ -180,10 +180,22 @@ contract PollHubTest is Test {
 
     function test_claimBeforeTimeoutReverts() public {
         uint256 id = _create(0.01 ether);
-        _signN(id, 5, 1);
+        _signN(id, 4, 1); // sotto soglia: nessun claim anticipato
         vm.prank(creator);
         vm.expectRevert(StillOpen.selector);
-        hub.claim(id); // finestra ancora aperta
+        hub.claim(id); // finestra ancora aperta e quorum non raggiunto
+    }
+
+    function test_claimEarlyWhenQuorumReached() public {
+        uint256 id = _create(0.01 ether);
+        _signN(id, 5, 1); // quorum raggiunto
+        // nessuno skip: ancora dentro la finestra di firma
+        uint256 balC = creator.balance;
+        uint256 balG = gov.balance;
+        vm.prank(creator);
+        hub.claim(id); // consentito in anticipo perché ha il quorum
+        assertEq(creator.balance - balC, 0.01 ether); // rimborso integrale
+        assertEq(gov.balance, balG); // niente penale
     }
 
     function test_claimOnlyCreator() public {
