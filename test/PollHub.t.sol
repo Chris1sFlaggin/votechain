@@ -51,15 +51,22 @@ contract PollHubTest is Test {
         hub.createPetition("Titolo", "Desc"); // nessuna cauzione
     }
 
+    function test_createBelowMinStakeReverts() public {
+        uint256 belowMin = hub.MIN_STAKE() - 1; // > 0 ma sotto soglia
+        vm.prank(creator);
+        vm.expectRevert(BadPoll.selector);
+        hub.createPetition{value: belowMin}("Titolo", "Desc");
+    }
+
     function test_signIncrementsWithinWindow() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         _signN(id, 3, 1);
         (,,,, uint64 sigs,,,,) = hub.getPetition(id);
         assertEq(sigs, 3);
     }
 
     function test_signAfterTimeoutReverts() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         skip(hub.POLL_TIMEOUT()); // scaduto
         vm.prank(makeAddr("late"));
         vm.expectRevert(SigningClosed.selector);
@@ -67,7 +74,7 @@ contract PollHubTest is Test {
     }
 
     function test_noDoubleSign() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         address v = makeAddr("dv");
         vm.prank(v);
         hub.sign(id);
@@ -78,14 +85,14 @@ contract PollHubTest is Test {
 
     // ----------------------------------------------------- decide = segnale istituzionale
     function test_decideOnlyGovernment() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotGovernment.selector);
         hub.decide(id, true);
     }
 
     function test_decideBelowMinReverts() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         _signN(id, 4, 1); // 4 < 5
         vm.prank(gov);
         vm.expectRevert(BelowMinVotes.selector);
@@ -93,7 +100,7 @@ contract PollHubTest is Test {
     }
 
     function test_governmentDecisionIsSignalOnly() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         _signN(id, 5, 1);
         vm.prank(gov);
         hub.decide(id, true);
@@ -103,7 +110,7 @@ contract PollHubTest is Test {
     }
 
     function test_decideIsFinal() public {
-        uint256 id = _create(1 wei);
+        uint256 id = _create(hub.MIN_STAKE());
         _signN(id, 5, 1);
         vm.prank(gov);
         hub.decide(id, true);
@@ -140,7 +147,9 @@ contract PollHubTest is Test {
     }
 
     function test_oddStakeRemainderToCreator() public {
-        uint256 id = _create(3 wei);
+        uint256 stake = hub.MIN_STAKE() + 1; // importo dispari sopra la soglia
+        vm.prank(creator);
+        uint256 id = hub.createPetition{value: stake}("Titolo", "Desc");
         _signN(id, 4, 1); // sotto soglia -> split
         skip(hub.POLL_TIMEOUT());
 
@@ -148,8 +157,8 @@ contract PollHubTest is Test {
         uint256 balG = gov.balance;
         vm.prank(creator);
         hub.claim(id);
-        assertEq(gov.balance - balG, 1); // floor(3/2) allo Stato
-        assertEq(creator.balance - balC, 2); // resto al creatore (nessun wei perso)
+        assertEq(gov.balance - balG, stake / 2); // floor allo Stato
+        assertEq(creator.balance - balC, stake - stake / 2); // resto dispari al creatore (nessun wei perso)
     }
 
     function test_moneyIndependentOfDecision() public {
@@ -211,7 +220,7 @@ contract PollHubTest is Test {
     /// Invariante di conservazione: rimborso + quota Stato = stake sempre; lo Stato
     /// prende il 50% (floor) solo sotto soglia, zero altrimenti. Nessun wei perso.
     function testFuzz_splitConservesStake(uint96 rawStake, uint8 sigs) public {
-        uint256 stake = bound(rawStake, 1, 1e18);
+        uint256 stake = bound(rawStake, hub.MIN_STAKE(), 1e18);
         uint256 n = bound(sigs, 0, 8);
 
         address c = makeAddr("fuzzC");

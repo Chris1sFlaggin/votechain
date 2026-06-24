@@ -34,6 +34,7 @@ const POLLHUB_ABI = [
   "function createPetition(string, string) payable returns (uint256)",
   "function sign(uint256)",
   "function claim(uint256)",
+  "function MIN_STAKE() view returns (uint256)",
   "function MIN_SIGNATURES() view returns (uint64)",
   "function POLL_TIMEOUT() view returns (uint64)",
   "function deadline(uint256) view returns (uint256)",
@@ -616,6 +617,9 @@ $("createPoll").onclick = async () => {
   let value;
   try { value = ethers.parseEther(($("pollStake").value || "0").trim()); } catch { return toast("Cauzione non valida.", "err"); }
   if (value <= 0n) return toast("La cauzione deve essere maggiore di 0.", "err");
+  let minStake = 0n;
+  try { minStake = await S.pollHub.MIN_STAKE(); } catch { /* contratto vecchio: nessuna soglia */ }
+  if (value < minStake) return toast(`Cauzione minima ${ethers.formatEther(minStake)} ETH.`, "err");
 
   // disattiva il bottone all'istante (con feedback visivo) finché la tx non è confermata
   // o fallisce: così un secondo click non può pubblicare una seconda raccolta.

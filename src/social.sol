@@ -23,6 +23,7 @@ error StillOpen(); // claim prima della scadenza della raccolta
 
 contract PollHub {
     // Parametri di sistema (PoC): modificabili in un punto solo.
+    uint256 public constant MIN_STAKE = 0.001 ether;
     uint64 public constant MIN_SIGNATURES = 5; // soglia firme per il rimborso integrale
     uint64 public constant POLL_TIMEOUT = 7 days; // durata raccolta, uguale per ogni petizione
 
@@ -68,7 +69,7 @@ contract PollHub {
     /// @param description Testo della petizione.
     /// @return id         Indice assegnato alla nuova petizione.
     function createPetition(string calldata title, string calldata description) external payable returns (uint256 id) {
-        if (bytes(title).length == 0 || bytes(description).length == 0 || msg.value == 0) revert BadPoll();
+        if (bytes(title).length == 0 || bytes(description).length == 0 || msg.value < MIN_STAKE) revert BadPoll();
         id = _petitions.length;
         Petition storage p = _petitions.push();
         p.creator = msg.sender;
