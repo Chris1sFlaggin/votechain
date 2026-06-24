@@ -34,14 +34,12 @@ const POLLHUB_ABI = [
   "function createPetition(string, string) payable returns (uint256)",
   "function sign(uint256)",
   "function claim(uint256)",
-  "function closePeriod()",
-  "function round() view returns (uint256)",
-  "function forfeitedOf(uint256) view returns (uint256)",
-  "function approvedStakeOf(uint256) view returns (uint256)",
-  "function petitionRound(uint256) view returns (uint256)",
+  "function MIN_SIGNATURES() view returns (uint64)",
+  "function POLL_TIMEOUT() view returns (uint64)",
+  "function deadline(uint256) view returns (uint256)",
   "function petitionsCount() view returns (uint256)",
-  "function getPetition(uint256) view returns (address creator, string title, string description, uint128 stake, uint64 signatureCount, bool approved, bool decided, bool claimed)",
-  "function hasSignedPetition(uint256, address) view returns (bool)",
+  "function getPetition(uint256) view returns (address creator, string title, string description, uint128 stake, uint64 signatureCount, uint64 createdAt, bool approved, bool decided, bool claimed)",
+  "function hasSigned(uint256, address) view returns (bool)",
   "function decide(uint256, bool)",
 ];
 
@@ -312,11 +310,10 @@ const EXPLORER_IFACE = new ethers.Interface([
   "event Revealed(address indexed voter, string vote, string nonce, bool matches)",
   "event PhaseChanged(uint8 phase)",
   "event Finalized(uint256 valid, uint256 nullified)",
-  "event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake)",
+  "event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake, uint64 deadline)",
   "event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures)",
   "event PetitionDecided(uint256 indexed id, address indexed government, bool approved)",
-  "event StakeClaimed(uint256 indexed id, address indexed creator, uint256 stake, uint256 roi)",
-  "event PeriodClosed(uint256 indexed round, uint256 forfeited, uint256 approvedStake)",
+  "event StakeResolved(uint256 indexed id, address indexed creator, uint256 refunded, uint256 toState, bool reachedQuorum)",
 ]);
 const PHASE_NAME = ["Configurazione", "Votazione", "Spoglio", "Chiuso"];
 const shortA = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—");
@@ -357,8 +354,8 @@ const EVT_META = {
   PetitionCreated: {
     ico: "", kind: "poll", title: "Raccolta firme creata",
     sum: (a) => `«${a.title}» · cauzione ${ethers.formatEther(a.stake)}Ξ`,
-    why: "Un cittadino ha avviato una raccolta firme depositando una cauzione (anti-spam). La petizione è aperta a tutti: basta firmare con il proprio wallet.",
-    data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Titolo", a.title], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`]],
+    why: "Un cittadino ha avviato una raccolta firme depositando una cauzione (anti-spam). La petizione è aperta a tutti per una finestra a tempo fisso: basta firmare con il proprio wallet entro la scadenza.",
+    data: (a) => [["ID", String(a.id)], ["Creatore", shortA(a.creator)], ["Titolo", a.title], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`], ["Scadenza", new Date(Number(a.deadline) * 1000).toLocaleString("it-IT")]],
   },
   Signed: {
     ico: "", kind: "pollvote", title: "Firma raccolta",
@@ -369,20 +366,16 @@ const EVT_META = {
   PetitionDecided: {
     ico: "", kind: "won", title: "Petizione decisa dal governo",
     sum: (a) => `${a.approved ? "APPROVATA" : "RESPINTA"} dal governo`,
-    why: "Il governo ha espresso la sua decisione sulla petizione che ha raggiunto la soglia minima di firme. Se approvata, il creatore può reclamare la cauzione.",
+    why: "Valutazione istituzionale: il governo approva o respinge una petizione che ha raggiunto la soglia minima di firme. È un segnale on-chain e NON tocca la cauzione: il rimborso dipende solo da firme e scadenza.",
     data: (a) => [["Petizione", String(a.id)], ["Governo", shortA(a.government)], ["Decisione", a.approved ? "Approvata" : "Respinta"]],
   },
-  StakeClaimed: {
-    ico: "", kind: "claim", title: "Cauzione + ROI riscattati",
-    sum: (a) => `${ethers.formatEther(a.stake + a.roi)}Ξ al creatore · ROI ${ethers.formatEther(a.roi)}Ξ`,
-    why: "Il creatore di una petizione approvata riprende la cauzione PIÙ un ROI proporzionale al proprio stake, finanziato dalle cauzioni delle petizioni respinte nello stesso round. Trasferimento di ETH eseguito e tracciato dal contratto.",
-    data: (a) => [["Petizione", String(a.id)], ["Creatore", shortA(a.creator)], ["Cauzione", `${ethers.formatEther(a.stake)} ETH`], ["ROI", `${ethers.formatEther(a.roi)} ETH`]],
-  },
-  PeriodClosed: {
-    ico: "", kind: "phase", title: "Periodo chiuso (round)",
-    sum: (a) => `round ${a.round} liquidato · montepremi ${ethers.formatEther(a.forfeited)}Ξ`,
-    why: "Il governo ha chiuso il round: forfeited e approvedStake sono ora definitivi, quindi il tasso del ROI è fissato e gli approvati possono reclamare. La chiusura garantisce la solvenza (si distribuisce solo ciò che esiste).",
-    data: (a) => [["Round", String(a.round)], ["Montepremi (respinte)", `${ethers.formatEther(a.forfeited)} ETH`], ["Stake approvati", `${ethers.formatEther(a.approvedStake)} ETH`]],
+  StakeResolved: {
+    ico: "", kind: "claim", title: "Cauzione liquidata",
+    sum: (a) => a.reachedQuorum
+      ? `rimborso integrale ${ethers.formatEther(a.refunded)}Ξ al creatore`
+      : `penale: ${ethers.formatEther(a.toState)}Ξ allo Stato · ${ethers.formatEther(a.refunded)}Ξ al creatore`,
+    why: "Scaduta la raccolta, la cauzione viene liquidata in base alle firme: quorum raggiunto → 100% al creatore; sotto soglia → 50% trattenuto dallo Stato come penale anti-spam e 50% restituito. Esito automatico, indipendente dalla valutazione del governo.",
+    data: (a) => [["Petizione", String(a.id)], ["Creatore", shortA(a.creator)], ["Rimborsato", `${ethers.formatEther(a.refunded)} ETH`], ["Allo Stato", `${ethers.formatEther(a.toState)} ETH`], ["Quorum", a.reachedQuorum ? "raggiunto" : "non raggiunto"]],
   },
 };
 
@@ -507,14 +500,6 @@ async function renderSocial() {
       govShow("pending");
     }
     renderGovLists();
-    try {
-      const r = Number(await S.pollHub.round());
-      $("govRoundNum").textContent = String(r);
-    } catch { /* contratto non pronto */ }
-    $("govClosePeriod").onclick = async () => {
-      const r = Number(await S.pollHub.round());
-      if (await tx(S.pollHub.closePeriod(), `Periodo chiuso: round ${r} liquidabile.`)) renderSocial();
-    };
   } else {
     renderPolls();
   }
@@ -664,45 +649,46 @@ async function pollCard(id) {
   const stake = p.stake, total = Number(p.signatureCount);
   const approved = p.approved, decided = p.decided, claimed = p.claimed;
   
-  const hasSigned = await S.pollHub.hasSignedPetition(id, S.account).catch(() => false);
+  const hasSigned = await S.pollHub.hasSigned(id, S.account).catch(() => false);
   const isCreator = S.account && creator.toLowerCase() === S.account.toLowerCase();
 
-  const curRound = Number(await S.pollHub.round().catch(() => 0));
-  const pRound = decided ? Number(await S.pollHub.petitionRound(id).catch(() => 0)) : 0;
-  const roundClosed = decided && pRound < curRound;
-  let expectedPayout = stake; // BigInt
-  if (roundClosed) {
-    const fr = await S.pollHub.forfeitedOf(pRound).catch(() => 0n);
-    const as = await S.pollHub.approvedStakeOf(pRound).catch(() => 0n);
-    const roi = as > 0n ? (BigInt(fr) * BigInt(stake)) / BigInt(as) : 0n;
-    expectedPayout = BigInt(stake) + roi;
-  }
+  // finestra di firma a tempo: scaduta -> niente più firme, il creatore può liquidare
+  const deadlineTs = Number(await S.pollHub.deadline(id).catch(() => 0));
+  const expired = deadlineTs > 0 && Date.now() / 1000 >= deadlineTs;
+  const reachedQuorum = total >= MIN_VOTES;
+  // payout atteso: quorum -> 100%; sotto soglia -> 50% (penale anti-spam allo Stato)
+  const expectedPayout = reachedQuorum ? BigInt(stake) : BigInt(stake) - BigInt(stake) / 2n;
 
   let prog, progLabel;
-  if (decided) {
+  if (expired) {
     prog = 100;
-    progLabel = approved ? "Approvata dal governo" : "Respinta dal governo";
+    progLabel = reachedQuorum
+      ? (decided ? (approved ? "Approvata dal governo" : "Respinta dal governo") : "Quorum raggiunto · in attesa di valutazione")
+      : "Scaduta · quorum non raggiunto";
   } else {
     prog = Math.min(100, Math.round((100 * total) / MIN_VOTES));
-    progLabel = total >= MIN_VOTES ? `In attesa di decisione` : `${total}/${MIN_VOTES} firme minime`;
+    progLabel = reachedQuorum ? `Quorum raggiunto · raccolta aperta` : `${total}/${MIN_VOTES} firme minime`;
   }
-  
+
   let badge = "";
   if (decided) badge = approved ? `<span class="won">APPROVATA</span>` : `<span class="pill">Respinta</span>`;
   else badge = `<span class="prog-pill">${total} firme</span>`;
-  
+
   let claim = "";
-  if (isCreator && decided && approved && !claimed && roundClosed) {
-    claim = `<button class="btn btn--social poll-claim" data-claim="${id}">Reclama ${ethers.formatEther(expectedPayout)} ETH (cauzione + ROI)</button>`;
-  } else if (isCreator && decided && approved && !claimed && !roundClosed) {
-    claim = `<span class="muted" style="display:block;margin-top:10px;">In attesa di chiusura periodo (round ${pRound})</span>`;
-  } else if (isCreator && claimed) {
-    claim = `<span class="muted" style="display:block;margin-top:10px;">cauzione + ROI riscattati</span>`;
+  if (isCreator && claimed) {
+    claim = `<span class="muted" style="display:block;margin-top:10px;">cauzione liquidata</span>`;
+  } else if (isCreator && expired) {
+    const lbl = reachedQuorum
+      ? `Reclama ${ethers.formatEther(expectedPayout)} ETH (rimborso integrale)`
+      : `Reclama ${ethers.formatEther(expectedPayout)} ETH (50% · penale allo Stato)`;
+    claim = `<button class="btn btn--social poll-claim" data-claim="${id}">${lbl}</button>`;
+  } else if (isCreator) {
+    claim = `<span class="muted" style="display:block;margin-top:10px;">Liquidabile dopo la scadenza (${new Date(deadlineTs * 1000).toLocaleString("it-IT")})</span>`;
   }
-  
+
   const tags = `${isCreator ? '<span class="pill">tua</span>' : ""}${hasSigned ? '<span class="pill pill--ok">hai firmato</span>' : ""}`;
-  const dis = (hasSigned || decided) ? "disabled" : "";
-  const signBtn = `<button class="btn btn--primary" style="width:100%;margin-top:1rem;" data-pid="${id}" ${dis}>${hasSigned ? 'Hai già firmato' : 'Firma con Wallet'}</button>`;
+  const dis = (hasSigned || expired) ? "disabled" : "";
+  const signBtn = `<button class="btn btn--primary" style="width:100%;margin-top:1rem;" data-pid="${id}" ${dis}>${hasSigned ? 'Hai già firmato' : (expired ? 'Raccolta scaduta' : 'Firma con Wallet')}</button>`;
 
   return `<article class="poll">
     <div class="poll__head">${avatar(creator)}<span class="addr">${creator.slice(0, 6)}…${creator.slice(-4)}</span>${tags}<span class="poll__stake">cauzione ${ethers.formatEther(stake)}Ξ</span>${badge}</div>
@@ -719,7 +705,7 @@ function wirePolls() {
     if (ok) await renderPolls();
   });
   document.querySelectorAll("[data-claim]").forEach((b) => b.onclick = async () => {
-    const ok = await tx(S.pollHub.claim(Number(b.dataset.claim)), "Cauzione riscattata.");
+    const ok = await tx(S.pollHub.claim(Number(b.dataset.claim)), "Cauzione liquidata.");
     if (ok) await renderPolls();
   });
 }

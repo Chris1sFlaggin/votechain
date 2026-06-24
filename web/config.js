@@ -3,6 +3,6 @@
 // di ciascuno è il governo del proprio sistema.
 const CONFIG = {
   chainId: 11155111, // Sepolia: il sito chiede a MetaMask di passare a questa rete
-  factory: "0xF0d0018E87B672c51db503239565834A314daa0d", // indirizzo GovFactory su Sepolia
-  pollHub: "0x07A435FB521674CF7dd78794936828612c43c902", // indirizzo PollHub su Sepolia
+  factory: "0x24f1C31d119E957872052A07f738678D9f1C4Cf6", // indirizzo GovFactory su Sepolia
+  pollHub: "0xbb1c74c9ABeBd19a389D2AFcda4AF1F2f780a77d", // indirizzo PollHub su Sepolia
 };

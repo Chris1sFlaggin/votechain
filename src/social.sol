@@ -2,52 +2,55 @@
 pragma solidity ^0.8.20;
 
 // PollHub — raccolta firme social (petizioni). Governo = chi fa il deploy.
-// Nessun SPID/router: il deployer è il governo che approva/respinge le petizioni
-// che superano MIN_SIGNATURES. Chiunque crea una raccolta depositando una cauzione
-// (anti-spam) e chiunque firma una sola volta col proprio wallet. Se approvata, il
-// creatore riprende la cauzione; se respinta, resta bloccata. File autosufficiente.
+// Chiunque crea una raccolta depositando una cauzione (anti-spam) e chiunque firma
+// una sola volta col proprio wallet, entro una finestra temporale fissa (POLL_TIMEOUT,
+// uguale per ogni petizione). Allo scadere il creatore liquida la cauzione:
+//   - firme >= MIN_SIGNATURES -> rimborso integrale al creatore;
+//   - firme <  MIN_SIGNATURES -> penale anti-spam: 50% allo Stato (governo), 50% al creatore.
+// Il governo puo' inoltre esprimere una valutazione istituzionale (decide) come segnale
+// on-chain (approva/respinge), SENZA alcun effetto sulla cauzione. File autosufficiente.
 
 // ----------------------------------------------------------------- errori (gas-efficient)
 error BadPoll();
 error AlreadyVoted(); // riuso: "già firmato"
 error NotCreator();
-error PollNotWon();
 error AlreadyClaimed();
-error BelowMinVotes(); // sotto la soglia minima di firme
+error BelowMinVotes(); // sotto la soglia minima di firme (per decide)
 error NotGovernment();
 error AlreadyDecided(); // decide chiamata due volte sulla stessa petizione
-error NotClosed(); // claim su un round non ancora chiuso
-error RoundHasNoBeneficiaries(); // chiusura con montepremi (respinte) ma nessun approvato
+error SigningClosed(); // firma dopo la scadenza della raccolta
+error StillOpen(); // claim prima della scadenza della raccolta
 
 contract PollHub {
-    uint64 public constant MIN_SIGNATURES = 5; // soglia minima firme per essere approvabile (PoC)
+    // Parametri di sistema (PoC): modificabili in un punto solo.
+    uint64 public constant MIN_SIGNATURES = 5; // soglia firme per il rimborso integrale
+    uint64 public constant POLL_TIMEOUT = 7 days; // durata raccolta, uguale per ogni petizione
 
-    address public immutable government; // chi ha fatto il deploy
-
-    uint256 public round; // round APERTO corrente (parte da 0)
-    mapping(uint256 => uint256) public forfeitedOf; // round => somma stake delle respinte
-    mapping(uint256 => uint256) public approvedStakeOf; // round => somma stake delle approvate
+    address public immutable government; // chi ha fatto il deploy = "Stato"
 
     struct Petition {
+        // campi ordinati per impacchettamento: creator + 3 bool in uno slot,
+        // stake + i due uint64 nel successivo; le stringhe dinamiche in coda.
         address creator;
-        string title;
-        string description;
+        bool approved; // valutazione istituzionale (segnale; nessun effetto sui soldi)
+        bool decided; // true se il governo ha espresso la valutazione
+        bool claimed; // true se la cauzione è stata liquidata
         uint128 stake; // cauzione del creatore (wei)
         uint64 signatureCount;
-        bool approved; // true = approvata, false = respinta
-        bool decided; // true se il governo ha deciso
-        bool claimed; // true se la cauzione è stata reclamata
-        uint256 decidedRound; // round in cui il governo ha deciso la petizione
+        uint64 createdAt; // timestamp di creazione; scadenza = createdAt + POLL_TIMEOUT
+        string title;
+        string description;
     }
 
     Petition[] private _petitions; // petitionId = indice
     mapping(uint256 => mapping(address => bool)) public hasSigned; // id => firmatario => bool
 
-    event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake);
+    event PetitionCreated(uint256 indexed id, address indexed creator, string title, uint128 stake, uint64 deadline);
     event Signed(uint256 indexed id, address indexed signer, uint64 totalSignatures);
     event PetitionDecided(uint256 indexed id, address indexed government, bool approved);
-    event StakeClaimed(uint256 indexed id, address indexed creator, uint256 stake, uint256 roi);
-    event PeriodClosed(uint256 indexed round, uint256 forfeited, uint256 approvedStake);
+    event StakeResolved(
+        uint256 indexed id, address indexed creator, uint256 refunded, uint256 toState, bool reachedQuorum
+    );
 
     modifier onlyGov() {
         if (msg.sender != government) revert NotGovernment();
@@ -58,36 +61,9 @@ contract PollHub {
         government = msg.sender;
     }
 
-    // ------------------------------------------------------------------------------ GOVERNO
-    /// @notice Il GOVERNO (deployer) approva o respinge in via DEFINITIVA una raccolta che ha
-    ///         raggiunto MIN_SIGNATURES. La decisione si settla nel round corrente.
-    /// @param id      Indice della petizione.
-    /// @param approve true = approvata (lo stake concorre al ROI); false = respinta (alimenta il montepremi).
-    function decide(uint256 id, bool approve) external onlyGov {
-        Petition storage p = _petitions[id];
-        if (p.creator == address(0)) revert BadPoll();
-        if (p.signatureCount < MIN_SIGNATURES) revert BelowMinVotes();
-        if (p.decided) revert AlreadyDecided(); // finalita': niente piu' cambio di idea
-        p.approved = approve;
-        p.decided = true;
-        p.decidedRound = round; // si settla nel round corrente
-        if (approve) approvedStakeOf[round] += p.stake;
-        else forfeitedOf[round] += p.stake; // respinta: lo stake alimenta il montepremi del round
-        emit PetitionDecided(id, msg.sender, approve);
-    }
-
-    /// @notice Il GOVERNO chiude il round corrente: forfeitedOf/approvedStakeOf diventano
-    ///         definitivi e gli approvati di quel round possono reclamare. Ne apre subito uno nuovo.
-    function closePeriod() external onlyGov {
-        // guardia: non chiudere un round con montepremi (respinte) ma senza approvati,
-        // altrimenti quei fondi resterebbero bloccati senza beneficiari.
-        if (forfeitedOf[round] > 0 && approvedStakeOf[round] == 0) revert RoundHasNoBeneficiaries();
-        emit PeriodClosed(round, forfeitedOf[round], approvedStakeOf[round]);
-        round += 1; // il round appena chiuso e' ora immutabile e reclamabile
-    }
-
     // ------------------------------------------------------------------ CITTADINI / CREATORI
-    /// @notice Crea una raccolta firme depositando la cauzione (msg.value).
+    /// @notice Crea una raccolta firme depositando la cauzione (msg.value). Parte subito la
+    ///         finestra di firma, lunga POLL_TIMEOUT.
     /// @param title       Titolo della petizione.
     /// @param description Testo della petizione.
     /// @return id         Indice assegnato alla nuova petizione.
@@ -99,58 +75,77 @@ contract PollHub {
         p.title = title;
         p.description = description;
         p.stake = uint128(msg.value);
-        emit PetitionCreated(id, msg.sender, title, p.stake);
+        p.createdAt = uint64(block.timestamp);
+        emit PetitionCreated(id, msg.sender, title, p.stake, p.createdAt + POLL_TIMEOUT);
     }
 
-    /// @notice Firma una raccolta (una sola volta per indirizzo).
+    /// @notice Firma una raccolta (una sola volta per indirizzo), solo finché è aperta.
     /// @param id Indice della petizione da firmare.
     function sign(uint256 id) external {
         Petition storage p = _petitions[id];
         if (p.creator == address(0)) revert BadPoll();
+        if (block.timestamp >= p.createdAt + POLL_TIMEOUT) revert SigningClosed();
         if (hasSigned[id][msg.sender]) revert AlreadyVoted();
-        if (p.decided) revert PollNotWon(); // già decisa: non si firma più
         hasSigned[id][msg.sender] = true;
         p.signatureCount += 1;
         emit Signed(id, msg.sender, p.signatureCount);
     }
 
-    /// @notice Reclama la cauzione di una petizione approvata PIÙ il ROI proporzionale, dopo che
-    ///         il governo ha chiuso il round (closePeriod). Riservato al creatore, una sola volta.
+    /// @notice Liquida la cauzione dopo la scadenza. Riservato al creatore, una sola volta.
+    ///         Quorum raggiunto -> 100% al creatore; sotto soglia -> 50% allo Stato + 50% al
+    ///         creatore (il resto della divisione intera va al creatore: nessun wei perso).
     /// @param id Indice della petizione (il chiamante deve esserne il creatore).
     function claim(uint256 id) external {
         Petition storage p = _petitions[id];
         if (msg.sender != p.creator) revert NotCreator();
-        if (!p.decided) revert PollNotWon();
-        if (!p.approved) revert PollNotWon();
-        if (p.decidedRound >= round) revert NotClosed(); // round del voto non ancora chiuso
+        if (block.timestamp < p.createdAt + POLL_TIMEOUT) revert StillOpen();
         if (p.claimed) revert AlreadyClaimed();
         p.claimed = true; // checks-effects-interactions
 
         uint256 stakeAmt = uint256(p.stake);
-        uint256 rr = p.decidedRound;
-        // quota proporzionale del montepremi del round (moltiplica PRIMA di dividere)
-        uint256 roi = approvedStakeOf[rr] == 0 ? 0 : (forfeitedOf[rr] * stakeAmt) / approvedStakeOf[rr];
+        bool reached = p.signatureCount >= MIN_SIGNATURES;
+        uint256 toState = reached ? 0 : stakeAmt / 2; // penale anti-spam
+        uint256 refunded = stakeAmt - toState; // creatore (incassa l'eventuale resto dispari)
 
-        (bool ok,) = payable(p.creator).call{value: stakeAmt + roi}("");
-        require(ok, "payout failed");
-        emit StakeClaimed(id, p.creator, stakeAmt, roi);
+        if (toState > 0) {
+            (bool okState,) = payable(government).call{value: toState}("");
+            require(okState, "state payout failed");
+        }
+        (bool ok,) = payable(p.creator).call{value: refunded}("");
+        require(ok, "refund failed");
+        emit StakeResolved(id, p.creator, refunded, toState, reached);
+    }
+
+    // ------------------------------------------------------------------------------ GOVERNO
+    /// @notice Valutazione istituzionale (segnale on-chain): il governo approva o respinge in
+    ///         via DEFINITIVA una raccolta che ha raggiunto MIN_SIGNATURES. Non muove la
+    ///         cauzione: il rimborso dipende solo dalle firme e dalla scadenza.
+    /// @param id      Indice della petizione.
+    /// @param approve true = approvata, false = respinta.
+    function decide(uint256 id, bool approve) external onlyGov {
+        Petition storage p = _petitions[id];
+        if (p.creator == address(0)) revert BadPoll();
+        if (p.signatureCount < MIN_SIGNATURES) revert BelowMinVotes();
+        if (p.decided) revert AlreadyDecided(); // finalità: niente più cambio di idea
+        p.approved = approve;
+        p.decided = true;
+        emit PetitionDecided(id, msg.sender, approve);
     }
 
     // -------------------------------------------------------------------------------- VIEWS
     /// @notice Numero totale di petizioni create.
-    /// @return Conteggio delle petizioni.
     function petitionsCount() external view returns (uint256) {
         return _petitions.length;
     }
 
-    /// @notice Round in cui la petizione è stata decisa (il claim è possibile solo se quel round è chiuso).
+    /// @notice Timestamp di scadenza della raccolta firme (oltre il quale si può fare claim).
     /// @param id Indice della petizione.
-    /// @return Numero del round di decisione.
-    function petitionRound(uint256 id) external view returns (uint256) {
-        return _petitions[id].decidedRound;
+    function deadline(uint256 id) external view returns (uint256) {
+        return uint256(_petitions[id].createdAt) + POLL_TIMEOUT;
     }
 
-    /// @notice Dati completi di una petizione: creator, title, description, stake, signatureCount, approved, decided, claimed.
+    /// @notice Dati completi: creator, title, description, stake, signatureCount, createdAt,
+    ///         approved, decided, claimed.
     /// @param id Indice della petizione.
     function getPetition(uint256 id)
         external
@@ -161,20 +156,24 @@ contract PollHub {
             string memory description,
             uint128 stake,
             uint64 signatureCount,
+            uint64 createdAt,
             bool approved,
             bool decided,
             bool claimed
         )
     {
         Petition storage p = _petitions[id];
-        return (p.creator, p.title, p.description, p.stake, p.signatureCount, p.approved, p.decided, p.claimed);
-    }
-
-    /// @notice Indica se un indirizzo ha già firmato una petizione.
-    /// @param id     Indice della petizione.
-    /// @param signer Indirizzo da verificare.
-    /// @return true se ha già firmato.
-    function hasSignedPetition(uint256 id, address signer) external view returns (bool) {
-        return hasSigned[id][signer];
+        return
+            (
+                p.creator,
+                p.title,
+                p.description,
+                p.stake,
+                p.signatureCount,
+                p.createdAt,
+                p.approved,
+                p.decided,
+                p.claimed
+            );
     }
 }
