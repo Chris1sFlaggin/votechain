@@ -48,7 +48,7 @@ forge script script/DeploySystem.s.sol --rpc-url http://127.0.0.1:8545 \
   --broadcast
 
 # 3. incolla gli indirizzi stampati (GovFactory, PollHub) in web/config.js
-#    e imposta chainId: 31337  — oppure usali nel pannello ⚙️ del sito
+#    e imposta chainId: 31337  
 
 # 4. servi il frontend statico
 cd web && python3 -m http.server 8081
