@@ -650,11 +650,14 @@ async function renderPolls() {
   if (!n) { feed.innerHTML = `<div class="empty">Nessuna raccolta firme. Creane una con il "+" in basso.</div>`; return; }
   
   const ids = [...Array(n).keys()].reverse(); // più recenti in cima
-  feed.innerHTML = (await Promise.all(ids.map(pollCard))).join("");
+  // tempo della CATENA (block.timestamp), non l'orologio del browser: così la scadenza
+  // è coerente col contratto anche quando si avanza il tempo su anvil (evm_increaseTime).
+  const chainNow = Number((await S.provider.getBlock("latest")).timestamp);
+  feed.innerHTML = (await Promise.all(ids.map((id) => pollCard(id, chainNow)))).join("");
   wirePolls();
 }
 
-async function pollCard(id) {
+async function pollCard(id, chainNow) {
   const p = await S.pollHub.getPetition(id);
   const creator = p.creator, title = p.title, desc = p.description;
   const stake = p.stake, total = Number(p.signatureCount);
@@ -665,7 +668,7 @@ async function pollCard(id) {
 
   // finestra di firma a tempo: scaduta -> niente più firme, il creatore può liquidare
   const deadlineTs = Number(await S.pollHub.deadline(id).catch(() => 0));
-  const expired = deadlineTs > 0 && Date.now() / 1000 >= deadlineTs;
+  const expired = deadlineTs > 0 && chainNow >= deadlineTs;
   const reachedQuorum = total >= MIN_VOTES;
   // payout atteso: quorum -> 100%; sotto soglia -> 50% (penale anti-spam allo Stato)
   const expectedPayout = reachedQuorum ? BigInt(stake) : BigInt(stake) - BigInt(stake) / 2n;
