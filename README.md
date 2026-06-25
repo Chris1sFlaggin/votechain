@@ -34,12 +34,26 @@ Per usarla: **MetaMask** deve essere installato con un wallet che abilitato ad 
 
 ## Esecuzione in locale (anvil)
 
-bash
-
-Copy
 
 ```bash
-# 1. nodo EVM localeanvil# 2. deploy (in un altro terminale) — il deployer diventa il governo.# Crea anche 2 referendum demo e stampa gli indirizzi.forge script script/DeploySystem.s.sol --rpc-url http://127.0.0.1:8545 \ --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \ --broadcast# 3. incolla gli indirizzi stampati (GovFactory, PollHub) in web/config.js# e imposta chainId: 31337# 4. servi il frontend staticocd web && python3 -m http.server 8081# apri http://localhost:8081
+# 1. nodo EVM locale 
+    anvil
+# 2. deploy (in un altro terminale) 
+#   — il deployer diventa il governo.
+# Crea anche 2 referendum demo e stampa gli indirizzi.
+cd /path/to/votechain
+
+forge script script/DeploySystem.s.sol:DeploySystem \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  --broadcast
+
+# 3. incolla gli indirizzi stampati (GovFactory, PollHub) in web/config.js
+# e imposta chainId: 31337
+# 4. servi il frontend statico
+cd web && python3 -m http.server 8081
+# apri 
+http://localhost:8081
 ```
 
 In MetaMask aggiungi la rete anvil (RPC `http://127.0.0.1:8545`, chainId `31337`) e importa una chiave di anvil.  
