@@ -4,6 +4,6 @@
 const CONFIG = {
   chainId: 11155111, // Sepolia: il sito chiede a MetaMask di passare a questa rete
   name: "Sepolia",
-  factory: "0x7EF2e0048f5bAeDe046f6BF797943daF4ED8CB47", // indirizzo GovFactory su Sepolia
-  pollHub: "0xD7ACd2a9FD159E69Bb102A1ca21C9a3e3A5F771B", // indirizzo PollHub su Sepolia
+  factory: "0x5D950BCcF6c362dAF34C0c5198cAa218A049a75A", // indirizzo GovFactory su Sepolia
+  pollHub: "0x09B6909BA1e3a9289501cD17eaDb6c448682De38", // indirizzo PollHub su Sepolia
 };
