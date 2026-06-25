@@ -61,10 +61,6 @@ L’**account 0** (lo stesso che esegue lo script) è il governo; gli altri acco
 
 ## Test
 
-bash
-
-Copy
-
 ```bash
 forge test
 ```
