@@ -1,10 +1,12 @@
-/* VoteChain dApp — frontend statico (GitHub Pages + Sepolia). Solo wallet, niente backend.
+/* VoteChain dApp — frontend statico (GitHub Pages). Rete e indirizzi da config.js. Solo wallet, niente backend.
    Indirizzi in config.js. Ruoli mutuamente esclusivi: l'account registrato come Governo
    on-chain vede SOLO il pannello Governo; tutti gli altri sono cittadini e votano. */
 
 const PHASES = ["Votazione aperta", "Spoglio in corso", "Referendum chiuso"];
 const LABELS = { si: "Sì", no: "No", bianca: "Scheda Bianca" };
-const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { factory: "", pollHub: "", chainId: 11155111 };
+const CFG = (typeof CONFIG !== "undefined") ? CONFIG : { factory: "", pollHub: "", chainId: 11155111, name: "" };
+// nome leggibile della rete attesa (da config.js; fallback: "chain <id>")
+const NET_NAME = CFG.name || `chain ${CFG.chainId}`;
 
 const FACTORY_ABI = [
   "function government() view returns (address)",
@@ -95,7 +97,7 @@ async function connect() {
   window.ethereum.on?.("accountsChanged", () => location.reload());
   window.ethereum.on?.("chainChanged", () => location.reload());
   if (CFG.chainId && Number(net.chainId) !== Number(CFG.chainId)) {
-    toast(`Rete sbagliata (chain ${net.chainId}). Passa a Sepolia.`, "err");
+    toast(`Rete sbagliata (chain ${net.chainId}). Passa a ${NET_NAME}.`, "err");
     try {
       await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x" + Number(CFG.chainId).toString(16) }] });
     } catch { /* l'utente cambia a mano; chainChanged ricarica */ }
@@ -305,7 +307,7 @@ function wireCards() {
 
 
 // ============================================================ ESPLORA CHAIN (live)
-// Ascolta gli eventi dei NOSTRI contratti su Sepolia e li traduce in linguaggio umano:
+// Ascolta gli eventi dei NOSTRI contratti sulla rete configurata e li traduce in linguaggio umano:
 // cosa è successo, quali dati restano davvero on-chain, perché. Dà l'idea della blockchain.
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -607,7 +609,7 @@ document.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = () => {
   document.querySelectorAll(".snav").forEach((s) => s.classList.toggle("is-active", s === b && a !== "create"));
   if (a === "feed") { renderSocial(); window.scrollTo({ top: 0, behavior: "smooth" }); }
   else if (a === "create") {
-    if (!S.pollHub) return toast("Connetti il wallet su Sepolia per creare un sondaggio.", "err");
+    if (!S.pollHub) return toast(`Connetti il wallet su ${NET_NAME} per creare un sondaggio.`, "err");
     openSheet();
   } else if (a === "switch") showScreen("access");
 }));
@@ -615,7 +617,7 @@ document.querySelectorAll("[data-snav]").forEach((b) => (b.onclick = () => {
 $("createPoll").onclick = async () => {
   const btn = $("createPoll");
   if (btn.disabled) return; // anti doppio-click: una pubblicazione è già in corso
-  if (!S.pollHub) return toast("Connetti il wallet su Sepolia.", "err");
+  if (!S.pollHub) return toast(`Connetti il wallet su ${NET_NAME}.`, "err");
   const title = $("petitionTitle").value.trim();
   const desc = $("petitionDesc").value.trim();
   if (!title || !desc) return toast("Titolo e descrizione sono obbligatori.", "err");
