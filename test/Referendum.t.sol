@@ -44,8 +44,8 @@ contract ReferendumTest is Test {
         a[2] = "bianca";
     }
 
-    function _digest(bytes32 v, string memory n) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(v, n));
+    function _digest(address who, bytes32 v, string memory n) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(who, v, n));
     }
 
     function _nt(string memory n) internal pure returns (bytes32) {
@@ -57,22 +57,22 @@ contract ReferendumTest is Test {
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
         vm.expectRevert(VotingNotOpen.selector);
-        ref.commit(_digest(SI, "x"), _nt("x"));
+        ref.commit(_digest(alice, SI, "x"), _nt("x"));
     }
 
     function test_revoteOnlyLastCounts() public {
         vm.startPrank(alice);
-        ref.commit(_digest(SI, "n1"), _nt("n1"));
-        ref.commit(_digest(NO, "n2"), _nt("n2"));
+        ref.commit(_digest(alice, SI, "n1"), _nt("n1"));
+        ref.commit(_digest(alice, NO, "n2"), _nt("n2"));
         vm.stopPrank();
         (bytes32 last,,,,) = ref.ballots(alice);
-        assertEq(last, _digest(NO, "n2"));
+        assertEq(last, _digest(alice, NO, "n2"));
         assertEq(ref.revisions(alice), 2);
     }
 
     function test_revealBlockedDuringVoting() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "an"), _nt("an"));
+        ref.commit(_digest(alice, SI, "an"), _nt("an"));
         vm.prank(alice);
         vm.expectRevert(RevealClosed.selector);
         ref.reveal("an");
@@ -80,9 +80,9 @@ contract ReferendumTest is Test {
 
     function test_tallyCountAfterReveal() public {
         vm.prank(alice);
-        ref.commit(_digest(NO, "an"), _nt("an"));
+        ref.commit(_digest(alice, NO, "an"), _nt("an"));
         vm.prank(bob);
-        ref.commit(_digest(SI, "bn"), _nt("bn"));
+        ref.commit(_digest(bob, SI, "bn"), _nt("bn"));
 
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
@@ -104,7 +104,7 @@ contract ReferendumTest is Test {
 
     function test_wrongNonceNotCounted() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "good"), _nt("good"));
+        ref.commit(_digest(alice, SI, "good"), _nt("good"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
@@ -116,7 +116,7 @@ contract ReferendumTest is Test {
 
     function test_unrevealedIsNull() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "k"), _nt("k"));
+        ref.commit(_digest(alice, SI, "k"), _nt("k"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(gov);
@@ -138,7 +138,7 @@ contract ReferendumTest is Test {
 
     function test_revealBlockedAfterClose() public {
         vm.prank(alice);
-        ref.commit(_digest(SI, "z"), _nt("z"));
+        ref.commit(_digest(alice, SI, "z"), _nt("z"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(gov);
@@ -151,7 +151,7 @@ contract ReferendumTest is Test {
     function test_governmentCannotVote() public {
         vm.prank(gov);
         vm.expectRevert(GovernmentCannotVote.selector);
-        ref.commit(_digest(SI, "g"), _nt("g"));
+        ref.commit(_digest(gov, SI, "g"), _nt("g"));
     }
 
     function test_onlyGovernmentCreates() public {
@@ -176,6 +176,6 @@ contract ReferendumTest is Test {
     function test_extraGovCannotVote() public {
         vm.prank(EXTRA_GOV);
         vm.expectRevert(GovernmentCannotVote.selector);
-        ref.commit(_digest(SI, "g"), _nt("g"));
+        ref.commit(_digest(EXTRA_GOV, SI, "g"), _nt("g"));
     }
 }

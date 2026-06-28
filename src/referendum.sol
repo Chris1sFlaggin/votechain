@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 // Nessuna autenticazione SPID, nessuna giurisdizione. Il deployer della
 // GovFactory è il governo del proprio sistema: emette i referendum e ne guida
 // le fasi (Votazione → Spoglio → Chiuso). I cittadini votano col solo wallet,
-// un voto a testa. Il voto resta nascosto dietro keccak256(voto, nonce) fino
+// un voto a testa. Il voto resta nascosto dietro keccak256(addr, voto, nonce) fino
 // al reveal. Errori e verifier sono inlineati: il file è autosufficiente.
 
 // ----------------------------------------------------------------- errori (gas-efficient)
@@ -25,7 +25,7 @@ error EmptyOptions();
 ///                    conta solo l'ultimo. Nessun reveal qui (nessun conteggio in corso).
 ///  PHASE 2 TALLY   — niente nuovi digest; reveal aperto.
 ///  reveal(nonce)   — solo il nonce: il contratto prova ogni opzione e conferma quella il
-///                    cui keccak256(opzione,nonce) == lastDigest. Un reveal corretto blocca
+///                    cui keccak256(addr,opzione,nonce) == lastDigest. Un reveal corretto blocca
 ///                    la scheda; un nonce errato non conferma nulla (ritentabile).
 ///  PHASE 3 CLOSED  — close() conta, per wallet, il voto confermato.
 contract Referendum {
@@ -85,9 +85,11 @@ contract Referendum {
     }
 
     // ------------------------------------------------- verifier inlineato (ex VoteVerifier)
-    /// @dev digest = keccak256(voto + nonce): combacia con quello salvato al commit?
-    function _matches(bytes32 vote, string memory nonce, bytes32 stored) private pure returns (bool) {
-        return keccak256(abi.encodePacked(vote, nonce)) == stored;
+    /// @dev digest = keccak256(addr, voto, nonce): combacia con quello salvato al commit?
+    ///      L'indirizzo del votante è legato al preimage: un digest copiato da un altro
+    ///      wallet non combacerà mai al reveal (anti-replay cross-wallet).
+    function _matches(address voter, bytes32 vote, string memory nonce, bytes32 stored) private pure returns (bool) {
+        return keccak256(abi.encodePacked(voter, vote, nonce)) == stored;
     }
 
     // -------------------------------------------------------------------------- governo
@@ -119,7 +121,7 @@ contract Referendum {
 
     // ---------------------------------------------------------------------------- elettore
     /// @notice PHASE 1: deposita il digest nascondente del voto. Aperto a qualsiasi wallet.
-    /// @param d        keccak256(voto, nonce) — nasconde il voto fino al reveal.
+    /// @param d        keccak256(addr, voto, nonce) — nasconde il voto fino al reveal.
     /// @param nonceTag keccak256(nonce) — impegno sul nonce indipendente dal voto; l'unicità
     ///                 è per-wallet su questo (nonce riusato = errore, con qualunque voto).
     function commit(bytes32 d, bytes32 nonceTag) external {
@@ -147,7 +149,7 @@ contract Referendum {
         if (!b.committed) revert NoVote();
         if (b.confirmed) revert AlreadyRevealed();
         for (uint256 i; i < options.length; ++i) {
-            if (_matches(options[i], nonce, b.lastDigest)) {
+            if (_matches(msg.sender, options[i], nonce, b.lastDigest)) {
                 b.confirmed = true;
                 b.vote = options[i];
                 b.nonce = nonce;

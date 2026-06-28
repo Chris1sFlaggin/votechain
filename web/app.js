@@ -59,8 +59,8 @@ const labelOf = (id) => LABELS[id] || id;
 // Decode difensivo: un'opzione non-decodificabile non deve far saltare l'intera lista.
 const decodeOpt = (b) => { try { return ethers.decodeBytes32String(b); } catch { return String(b); } };
 // optionId è già un bytes32 (id unico letto da getOptions); il digest nasconde il voto.
-const digestOf = (optionId, nonce) =>
-  ethers.solidityPackedKeccak256(["bytes32", "string"], [optionId, nonce]);
+const digestOf = (voter, optionId, nonce) =>
+  ethers.solidityPackedKeccak256(["address", "bytes32", "string"], [voter, optionId, nonce]);
 // impegno sul nonce, indipendente dal voto: l'unicità è su questo → nonce riusato = errore
 // qualunque sia il voto (mentre il digest tiene nascosto il voto fino al reveal).
 const nonceTagOf = (nonce) => ethers.solidityPackedKeccak256(["string"], [nonce]);
@@ -279,7 +279,7 @@ function wireCards() {
     const n1 = f.querySelector('[data-n="1"]').value, n2 = f.querySelector('[data-n="2"]').value;
     if (n1 !== n2) return toast("I due nonce non coincidono.", "err");
     const c = new ethers.Contract(addr, REF_ABI, S.signer);
-    const d = digestOf(opt, n1);
+    const d = digestOf(S.account, opt, n1);
     const nt = nonceTagOf(n1);
     if (await c.usedNonce(S.account, nt)) return toast("Hai già usato questo nonce in questo referendum (con qualsiasi voto): scegline un altro.", "err");
     if (await tx(c.commit(d, nt), "Voto registrato sulla blockchain.")) await refresh();

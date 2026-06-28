@@ -29,8 +29,8 @@ contract CommitRevealTest is Test {
         NO = o[1];
     }
 
-    function _d(bytes32 v, string memory n) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(v, n));
+    function _d(address who, bytes32 v, string memory n) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(who, v, n));
     }
 
     function _nt(string memory n) internal pure returns (bytes32) {
@@ -39,11 +39,10 @@ contract CommitRevealTest is Test {
 
     /// L'unicità del nonce è PER-WALLET: due votanti diversi possono usare lo stesso nonce.
     function test_sameNonceDifferentVotersAllowed() public {
-        bytes32 d = _d(SI, "dup");
         vm.prank(alice);
-        ref.commit(d, _nt("dup"));
+        ref.commit(_d(alice, SI, "dup"), _nt("dup"));
         vm.prank(bob);
-        ref.commit(d, _nt("dup"));
+        ref.commit(_d(bob, SI, "dup"), _nt("dup"));
         (, bool aliceC,,,) = ref.ballots(alice);
         (, bool bobC,,,) = ref.ballots(bob);
         assertTrue(aliceC);
@@ -53,17 +52,17 @@ contract CommitRevealTest is Test {
     /// Stesso votante, stesso nonce -> rifiutato.
     function test_reusedNonceBySameVoterRejected() public {
         vm.startPrank(alice);
-        ref.commit(_d(SI, "n"), _nt("n"));
+        ref.commit(_d(alice, SI, "n"), _nt("n"));
         vm.expectRevert(NonceGiaUtilizzato.selector);
-        ref.commit(_d(SI, "n"), _nt("n"));
+        ref.commit(_d(alice, SI, "n"), _nt("n"));
         vm.stopPrank();
     }
 
     /// Re-voto ammesso solo con nonce nuovo.
     function test_freshNonceAllowsRevote() public {
         vm.startPrank(alice);
-        ref.commit(_d(SI, "n"), _nt("n"));
-        ref.commit(_d(NO, "m"), _nt("m"));
+        ref.commit(_d(alice, SI, "n"), _nt("n"));
+        ref.commit(_d(alice, NO, "m"), _nt("m"));
         vm.stopPrank();
         assertEq(ref.revisions(alice), 2);
     }
@@ -71,16 +70,16 @@ contract CommitRevealTest is Test {
     /// L'unicità è sul NONCE, non su (voto,nonce): stesso nonce + voto diverso -> rifiutato.
     function test_sameNonceDifferentVoteRejected() public {
         vm.startPrank(alice);
-        ref.commit(_d(SI, "shared"), _nt("shared"));
+        ref.commit(_d(alice, SI, "shared"), _nt("shared"));
         vm.expectRevert(NonceGiaUtilizzato.selector);
-        ref.commit(_d(NO, "shared"), _nt("shared"));
+        ref.commit(_d(alice, NO, "shared"), _nt("shared"));
         vm.stopPrank();
     }
 
     /// Reveal col solo nonce: il contratto deduce il voto.
     function test_revealWithOnlyNonceFindsVote() public {
         vm.prank(alice);
-        ref.commit(_d(NO, "secret"), _nt("secret"));
+        ref.commit(_d(alice, NO, "secret"), _nt("secret"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
@@ -94,7 +93,7 @@ contract CommitRevealTest is Test {
     /// Nonce errato non conferma nulla ed è ritentabile; poi quello giusto conferma.
     function test_canRetryAfterWrongReveal() public {
         vm.prank(alice);
-        ref.commit(_d(NO, "secret"), _nt("secret"));
+        ref.commit(_d(alice, NO, "secret"), _nt("secret"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
@@ -112,7 +111,7 @@ contract CommitRevealTest is Test {
     /// Dopo un reveal corretto la scheda è bloccata.
     function test_cannotReRevealAfterCorrect() public {
         vm.prank(alice);
-        ref.commit(_d(NO, "secret"), _nt("secret"));
+        ref.commit(_d(alice, NO, "secret"), _nt("secret"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
@@ -125,12 +124,46 @@ contract CommitRevealTest is Test {
     /// La matematica del digest: keccak256(voto, nonce) deduce l'opzione giusta.
     function test_digestMathDeducesOption() public {
         vm.prank(alice);
-        ref.commit(_d(SI, "abc"), _nt("abc"));
+        ref.commit(_d(alice, SI, "abc"), _nt("abc"));
         vm.prank(gov);
         ref.setPhase(Referendum.Phase.Tally);
         vm.prank(alice);
         ref.reveal("abc");
         (,,, bytes32 vote,) = ref.ballots(alice);
         assertEq(vote, SI);
+    }
+
+    /// Anti-replay cross-wallet: un digest copiato da un altro wallet non si rivela.
+    /// Il preimage lega msg.sender → keccak(bob,...) != keccak(alice,...).
+    /// Pre-fix questo fallirebbe: bob confermerebbe copiando digest + nonce pubblici di alice.
+    function test_replayFromOtherWalletFails() public {
+        // alice vota; il suo digest è pubblico on-chain (event Committed + lastDigest)
+        bytes32 stolen = _d(alice, SI, "secret");
+        vm.prank(alice);
+        ref.commit(stolen, _nt("secret"));
+
+        // bob copia lo stesso digest sotto il proprio wallet (commit non ispeziona il preimage)
+        vm.prank(bob);
+        ref.commit(stolen, _nt("secret"));
+
+        vm.prank(gov);
+        ref.setPhase(Referendum.Phase.Tally);
+
+        // alice rivela: il nonce diventa pubblico (calldata + event Revealed)
+        vm.prank(alice);
+        ref.reveal("secret");
+        (,, bool aliceOk,,) = ref.ballots(alice);
+        assertTrue(aliceOk); // voto legittimo confermato
+
+        // bob rivela con lo stesso nonce pubblico: nessuna opzione combacia (preimage legato ad alice)
+        vm.prank(bob);
+        ref.reveal("secret");
+        (,, bool bobOk,,) = ref.ballots(bob);
+        assertFalse(bobOk); // replay bloccato
+
+        // conteggio finale: conta solo il voto di alice
+        vm.prank(gov);
+        ref.close();
+        assertEq(ref.result(SI), 1);
     }
 }
